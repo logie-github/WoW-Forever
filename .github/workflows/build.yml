@@ -58,19 +58,29 @@ jobs:
           apk=$(find app/build/outputs/apk/modern/release -name '*.apk' | head -n1)
           mv "$apk" WoW-Forever.apk
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WoW-Forever
-          path: WoW-Forever.apk
-
       - name: Input rule and touch control tests
         run: ./gradlew --no-daemon testModernDebugUnitTest --tests 'app.gamenative.wowinput.*' --tests 'app.gamenative.rules.*' --tests 'com.winlator.inputcontrols.BindingComboTest' --tests 'app.gamenative.data.TouchGestureConfigTest'
 
+      - name: Release tag
+        id: tag
+        run: |
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n1)
+          echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          if [ -z "${{ inputs.release_tag }}" ]; then
+            if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+              echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "tag=v$version" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      # Every build is published as a GitHub release with the APK attached: the release for the app's
+      # versionName (v1.1.0...), replaced by later pushes until the version is bumped.
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          tag_name: ${{ steps.tag.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: WoW Forever ${{ inputs.release_tag || github.ref_name }}
+          name: WoW Forever ${{ steps.tag.outputs.tag }}
+          make_latest: true
           files: WoW-Forever.apk
