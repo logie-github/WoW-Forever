@@ -38,6 +38,15 @@ The app is built around Blizzard's End User License Agreement (last revised Marc
 **Open Battle.net** (beside Play, or the switch in Settings) goes back to the launcher: for updates, another account,
 or Battle.net's own settings.
 
+## Windows settings the app makes
+
+Battle.net checks Windows for things Wine's Windows doesn't have. The app sets them in its own Windows' registry
+before Wine starts (Windows settings, not Blizzard files):
+
+| Setting | Why |
+| :--- | :--- |
+| The Secondary Logon service (`seclogon`), enabled | Battle.net's installer stops with "Battle.net requires the Windows Secondary Logon service to be enabled" (BLZBNTBTS00000025) without it; Wine has no such service (Wine bug 39261). |
+
 ## Controls
 
 Every touch is one input. The layout follows the window on top.

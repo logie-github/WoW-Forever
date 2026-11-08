@@ -101,6 +101,8 @@ object Runtime {
         _state.value = State.Working(Step.WINDOWS)
         val settings = Settings(context)
         val container = container(context, settings)
+        // What Battle.net checks Windows for (the Secondary Logon service), in the registry before Wine starts.
+        withContext(Dispatchers.IO) { WindowsSetup.apply(container) }
         val driveC = File(container.rootDir, ".wine/drive_c")
 
         val (program, args) = when (mode) {
