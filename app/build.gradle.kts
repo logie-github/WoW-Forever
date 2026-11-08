@@ -45,8 +45,8 @@ android {
         manifestPlaceholders["screenOrientation"] = "unspecified"
         buildConfigField("boolean", "XR_BUILD", "false")
 
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         buildConfigField("boolean", "GOLD", "false")
         val iconValue = "@mipmap/ic_launcher"
@@ -218,6 +218,7 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.test.manifest)
     testImplementation(libs.junit)
+    testImplementation(kotlin("test-junit"))
     testImplementation(libs.robolectric)
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)

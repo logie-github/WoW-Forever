@@ -60,6 +60,8 @@ class PluviaApp : Application() {
         var inputControlsView: InputControlsView? = null
         var inputControlsManager: InputControlsManager? = null
         var touchpadView: TouchpadView? = null
+        /** The Blizzard launcher's WoW touch controls, when they replace the touchpad in game. */
+        var wowTouchView: app.gamenative.wowinput.WowTouchView? = null
         var imeInputReceiver: app.gamenative.externaldisplay.IMEInputReceiver? = null
         var radialMenuCoordinator: RadialMenuCoordinator? = null
 
@@ -105,6 +107,8 @@ class PluviaApp : Application() {
             inputControlsView = null
             inputControlsManager = null
             touchpadView = null
+            runCatching { wowTouchView?.release() }
+            wowTouchView = null
             radialMenuCoordinator = null
             keepAlive = false
             clearActiveSuspendState()

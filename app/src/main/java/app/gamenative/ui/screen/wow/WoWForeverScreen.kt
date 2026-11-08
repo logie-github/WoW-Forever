@@ -48,12 +48,8 @@ import app.gamenative.ui.screen.wow.WowClientDownloader.FLAVOR_DIR
 import app.gamenative.ui.screen.wow.WowClientDownloader.LEGACY_FLAVOR_DIR
 import app.gamenative.ui.screen.wow.WowClientDownloader.LEGACY_PRODUCT
 import app.gamenative.ui.screen.wow.WowClientDownloader.TARGET_PRODUCT
-import app.gamenative.ui.theme.WowBackgroundGradient
-import app.gamenative.ui.theme.WowBronze
-import app.gamenative.ui.theme.WowError
-import app.gamenative.ui.theme.WowGold
-import app.gamenative.ui.theme.WowMuted
-import app.gamenative.ui.theme.WowSubtle
+import app.gamenative.ui.screen.wow.look.BlizzTheme
+import app.gamenative.ui.screen.wow.look.Modern
 import app.gamenative.utils.AppUpdater
 import app.gamenative.utils.StorageUtils
 import app.gamenative.utils.renderReleaseNotes
@@ -291,11 +287,6 @@ fun WoWForeverScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    // Progress shows under the cards, which is below the fold on a landscape handheld.
-    val scrollState = rememberScrollState()
-    LaunchedEffect(isUpdating, isLaunching) {
-        if (isUpdating || isLaunching) scrollState.animateScrollTo(scrollState.maxValue)
-    }
 
     fun downloadGameFiles(failure: String, work: (File, (String) -> Unit) -> Unit, onSuccess: () -> Unit) {
         if (isUpdating || isLaunching) return
@@ -378,303 +369,139 @@ fun WoWForeverScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(WowBackgroundGradient))
-            .padding(24.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Text(
-                    text = "WORLD OF WARCRAFT",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Serif,
-                    letterSpacing = 3.sp,
-                    color = Color(0xFFF0E6D2)
-                )
-                Text(
-                    text = "FOREVER (ARM64 NATIVE)",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    color = WowGold
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(text = "${gpu.edition} Edition", fontSize = 11.sp, color = WowSubtle)
-            }
+    BlizzTheme {
+    var showSettings by remember { mutableStateOf(false) }
+    var touchControls by remember {
+        mutableStateOf(prefs(context).getBoolean(app.gamenative.wowinput.WowTouchView.PREF_ENABLED, true))
+    }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .border(1.dp, Color(0xFF2A3C54), RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E).copy(alpha = 0.85f)),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    SectionTitle("ENVIRONMENT READINESS", WowGold)
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CheckItem(label = if (files.exeExists) "ARM64 Binary ($EXE_NAME)" else "ARM64 Binary (downloads on Play)", ready = files.exeExists)
-                        CheckItem(label = "Game Asset Archives (Data/)", ready = files.dataExists)
-                        CheckItem(
-                            label = when {
-                                files.isWrongGame -> "Install Info ($BUILD_INFO - requires $TARGET_PRODUCT)"
-                                files.isLegacyBeta -> "Install Info ($BUILD_INFO - beta, upgrade required)"
-                                else -> "Install Info ($BUILD_INFO)"
-                            },
-                            ready = files.hasForever,
-                        )
-                        CheckItem(label = "All Files Access Permission", ready = files.hasStorageAccess)
-                        CheckItem(
-                            label = if (hasSavedLogin) "Battle.net Login (Configured)" else "Battle.net Login (Configure below play button)",
-                            ready = hasSavedLogin,
-                        )
-                        appUpdate?.let {
-                            CheckItem(
-                                label = "App Build: v${BuildConfig.VERSION_NAME} (v${it.version} available)",
-                                ready = false,
-                            )
-                        } ?: CheckItem(
-                            label = "App Build: v${BuildConfig.VERSION_NAME}",
-                            ready = true,
-                        )
-                        versionStatus?.let { version ->
-                            CheckItem(
-                                label = if (version.isOutdated) {
-                                    "Client Build: ${version.localVersion} (Update ${version.remoteVersion} available)"
-                                } else {
-                                    "Client Build: ${version.localVersion} (Up to date)"
-                                },
-                                ready = !version.isOutdated,
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = Color(0xFF1E2D44))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(text = "Target Path: $gamePath", fontSize = 11.sp, color = WowSubtle, maxLines = 2)
-
-                    Row {
-                        OptionMenu("Region: ${region.label}", Icons.Default.Public, GameRegion.entries, region, { it.label }, !isLaunching) {
-                            GameRegion.save(context, it)
-                            region = it
-                        }
-                        OptionMenu("Resolution: ${resolution.label}", Icons.Default.AspectRatio, RenderResolution.entries, resolution, { it.label }, !isLaunching) {
-                            RenderResolution.save(context, it)
-                            resolution = it
-                        }
-                    }
-
-                    errorMessage?.let {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(text = "Error: $it", fontSize = 12.sp, color = WowError, fontWeight = FontWeight.Medium)
-                    }
-                }
-            }
-
-            if (files.needsInstall && files.hasStorageAccess) {
-                Spacer(modifier = Modifier.height(16.dp))
-                InstallCard(
-                    isUpgrade = files.isLegacyBeta,
-                    gamePath = gamePath,
-                    freeSpaceBytes = remember(gamePath, isUpdating) { GamePath.freeSpaceBytes(gamePath) },
-                    enabled = !isUpdating && !isLaunching,
-                    onChangeLocation = { folderPicker.launch(null) },
-                )
-            }
-
-            versionStatus?.takeIf { it.isOutdated && !files.needsInstall }?.let { version ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .border(1.dp, Color(0xFFE53E3E).copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1515).copy(alpha = 0.85f)),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = WowError, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            SectionTitle("GAME UPDATE REQUIRED", WowError)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Live servers require build ${version.remoteVersion}, but local files are build ${version.localVersion}. Logging in may fail or disconnect at realm selection.",
-                            fontSize = 12.sp,
-                            color = Color(0xFFFED7D7),
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Tap Update below to download the latest files directly from Blizzard's CDN over Wi-Fi.",
-                            fontSize = 11.sp,
-                            color = Color(0xFFCBD5E1)
-                        )
-                    }
-                }
-            }
-
-            appUpdate?.let { update ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .border(1.dp, WowGold.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2838).copy(alpha = 0.85f)),
-                    shape = RoundedCornerShape(16.dp),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, tint = WowGold, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            SectionTitle("APP UPDATE AVAILABLE (v${update.version})", WowGold)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "A new release is available on GitHub. Tap below to view notes and update.",
-                            fontSize = 12.sp,
-                            color = Color(0xFFCBD5E1),
-                            lineHeight = 16.sp,
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PrimaryButton(
-                            text = when {
-                                isDownloadingAppUpdate -> "DOWNLOADING UPDATE..."
-                                downloadedApk?.exists() == true -> "INSTALL UPDATE (v${update.version})"
-                                else -> "UPDATE APP (v${update.version})"
-                            },
-                            icon = Icons.Default.Refresh,
-                            enabled = !isDownloadingAppUpdate && !isLaunching && !isUpdating,
-                            onClick = {
-                                if (downloadedApk?.exists() == true) {
-                                    performAppUpdate()
-                                } else {
-                                    showAppUpdateDialog = true
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (isLaunching || isUpdating || (isCheckingVersion && WoWLauncherState.shouldAutoLaunch)) {
-                    CircularProgressIndicator(color = WowGold, modifier = Modifier.size(36.dp))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = when {
-                            isUpdating -> updateStatusText
-                            isLaunching -> statusText
-                            else -> "Checking for game updates..."
-                        },
-                        fontSize = 13.sp,
-                        color = Color(0xFFE2E8F0),
-                        textAlign = TextAlign.Center
+    val notices = buildList {
+        errorMessage?.let { add(Notice("Something went wrong", it, Modern.Bad)) }
+        if (files.needsInstall && files.hasStorageAccess) {
+            val free = "%.1f".format(GamePath.freeSpaceBytes(gamePath) / 1e9)
+            add(
+                if (files.isLegacyBeta) {
+                    Notice(
+                        "WoW Forever has launched",
+                        "This folder has the Forever beta, which Blizzard is retiring. Upgrading installs the full release into " +
+                            "$FLAVOR_DIR/ and reuses your game data, so only the new client downloads (about 100 MB).",
+                        Modern.Gold,
                     )
                 } else {
-                    when {
-                        !files.hasStorageAccess -> PrimaryButton(
-                            text = "GRANT STORAGE PERMISSION",
-                            icon = Icons.Default.FolderOpen,
-                            enabled = !isLaunching && !isUpdating,
-                            onClick = { StorageUtils.requestManageExternalStoragePermission(context) },
-                        )
-                        files.needsInstall -> {
-                            PrimaryButton(
-                                text = if (files.isLegacyBeta) "UPGRADE TO FULL RELEASE" else "DOWNLOAD & INSTALL",
-                                icon = Icons.Default.Download,
-                                enabled = !isLaunching && !isUpdating,
-                                onClick = ::performInstall,
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = { folderPicker.launch(null) },
-                                modifier = Modifier.fillMaxWidth(0.85f).height(48.dp),
-                                shape = RoundedCornerShape(14.dp),
-                            ) {
-                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(20.dp), tint = WowGold)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("LOCATE EXISTING FILES", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowGold)
-                            }
-                        }
-                        versionStatus?.isOutdated == true -> {
-                            PrimaryButton(
-                                text = "UPDATE TO ${versionStatus?.remoteVersion}",
-                                icon = Icons.Default.Refresh,
-                                enabled = canPlay,
-                                onClick = ::performUpdate,
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = ::launchGame,
-                                enabled = canPlay,
-                                modifier = Modifier.fillMaxWidth(0.85f).height(48.dp),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text(text = "LAUNCH ANYWAY (OUTDATED)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = WowError)
-                            }
-                        }
-                        else -> PrimaryButton(
-                            text = if (files.isWrongGame) "WOW FOREVER REQUIRED" else "PLAY WORLD OF WARCRAFT",
-                            icon = Icons.Default.PlayArrow,
-                            enabled = canPlay,
-                            onClick = ::launchGame,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        LinkButton("Refresh Status", Icons.Default.Refresh) {
-                            checkFiles()
-                            checkVersionStatus()
-                            checkAppUpdate()
-                        }
-                        if (!files.needsInstall) {
-                            LinkButton("Change Location", Icons.Default.FolderOpen) { folderPicker.launch(null) }
-                        }
-                        LinkButton(
-                            text = if (hasSavedLogin) "Update Login" else "Configure Login",
-                            icon = Icons.Default.Key,
-                        ) {
-                            showLoginDialog = true
-                        }
-                        if (hasSavedLogin) {
-                            LinkButton("Forget Saved Login", Icons.Default.Delete) {
-                                BattleNetSignIn.forget(context)
-                                BattleNetSignIn.removeLoginFile(File(gamePath))
-                                hasSavedLogin = false
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+                    Notice(
+                        "Install World of Warcraft",
+                        "Downloads the ARM64 client and archive indexes (about 250 MB) from Blizzard's CDN into $gamePath ($free GB free). " +
+                            "The rest streams in as you play and can grow past 50 GB. Copied the game from a PC? Use Locate files.",
+                        Modern.AccentBright,
+                    )
+                },
+            )
         }
+        versionStatus?.takeIf { it.isOutdated && !files.needsInstall }?.let { version ->
+            add(
+                Notice(
+                    "Game update required",
+                    "Live servers require build ${version.remoteVersion}; this folder has ${version.localVersion}. Logging in may fail " +
+                        "at realm selection until you update.",
+                    Modern.Warn,
+                ),
+            )
+        }
+        appUpdate?.let { add(Notice("App update v${it.version}", "A new WoW Forever release is on GitHub.", Modern.Gold)) }
+    }
+
+    val checks = buildList {
+        add(Check(if (files.exeExists) "ARM64 client ($EXE_NAME)" else "ARM64 client (downloads on Play)", files.exeExists))
+        add(Check("Game archives (Data/)", files.dataExists))
+        add(
+            Check(
+                when {
+                    files.isWrongGame -> "$BUILD_INFO: requires $TARGET_PRODUCT"
+                    files.isLegacyBeta -> "$BUILD_INFO: beta, upgrade required"
+                    else -> "Install info ($BUILD_INFO)"
+                },
+                files.hasForever,
+            ),
+        )
+        add(Check("All files access", files.hasStorageAccess))
+        add(Check(if (hasSavedLogin) "Battle.net login saved" else "Battle.net login (in •••)", hasSavedLogin))
+        add(Check(appUpdate?.let { "App v${BuildConfig.VERSION_NAME} (v${it.version} available)" } ?: "App v${BuildConfig.VERSION_NAME}", appUpdate == null))
+        versionStatus?.let { add(Check(if (it.isOutdated) "Client ${it.localVersion} (${it.remoteVersion} available)" else "Client ${it.localVersion}", !it.isOutdated)) }
+    }
+
+    val tags = buildList {
+        versionStatus?.let { add(if (it.isOutdated) "Update ${it.remoteVersion}" to Modern.Warn else "Build ${it.localVersion}" to Modern.Good) }
+        add(if (hasSavedLogin) "Login saved" to Modern.Good else "No login saved" to Modern.Warn)
+        add(region.label to Modern.Muted)
+        add(resolution.label to Modern.Muted)
+    }
+
+    val busy = when {
+        isUpdating -> updateStatusText
+        isLaunching -> statusText
+        isCheckingVersion && WoWLauncherState.shouldAutoLaunch -> "Checking for game updates..."
+        else -> null
+    }
+
+    val primary = when {
+        !files.hasStorageAccess -> Primary("Allow file access", HomeIcons.Folder, true) { StorageUtils.requestManageExternalStoragePermission(context) }
+        files.needsInstall -> Primary(if (files.isLegacyBeta) "Upgrade" else "Install", HomeIcons.Download, !isLaunching && !isUpdating, ::performInstall)
+        versionStatus?.isOutdated == true -> Primary("Update", HomeIcons.Refresh, canPlay, ::performUpdate)
+        files.isWrongGame -> Primary("Forever required", HomeIcons.Play, false) {}
+        else -> Primary("Play", HomeIcons.Play, canPlay, ::launchGame)
+    }
+
+    val secondary = when {
+        !files.hasStorageAccess -> null
+        files.needsInstall -> Secondary("Locate files", HomeIcons.Folder, Modern.Text) { folderPicker.launch(null) }
+        versionStatus?.isOutdated == true -> Secondary("Launch anyway", null, Modern.Warn, ::launchGame)
+        appUpdate != null -> Secondary(
+            if (downloadedApk?.exists() == true) "Install update" else "Update app",
+            HomeIcons.Refresh, Modern.Gold,
+        ) { if (downloadedApk?.exists() == true) performAppUpdate() else showAppUpdateDialog = true }
+        else -> null
+    }
+
+    ForeverHome(
+        HomeState(gpu.edition, checks, notices, tags, busy, primary, secondary),
+        onOpenSettings = { showSettings = true },
+    )
+
+    if (showSettings) {
+        SettingsSheet(
+            SettingsState(region, resolution, touchControls, hasSavedLogin, gamePath, enabled = !isLaunching && !isUpdating),
+            onClose = { showSettings = false },
+            onRegion = {
+                GameRegion.save(context, it)
+                region = it
+            },
+            onResolution = {
+                RenderResolution.save(context, it)
+                resolution = it
+            },
+            onTouchControls = {
+                prefs(context).edit().putBoolean(app.gamenative.wowinput.WowTouchView.PREF_ENABLED, it).apply()
+                touchControls = it
+            },
+            onLogin = {
+                showSettings = false
+                showLoginDialog = true
+            },
+            onForgetLogin = {
+                BattleNetSignIn.forget(context)
+                BattleNetSignIn.removeLoginFile(File(gamePath))
+                hasSavedLogin = false
+            },
+            onChangeLocation = {
+                showSettings = false
+                folderPicker.launch(null)
+            },
+            onRefresh = {
+                checkFiles()
+                checkVersionStatus()
+                checkAppUpdate()
+            },
+        )
     }
 
     if (showLoginDialog) {
@@ -691,7 +518,7 @@ fun WoWForeverScreen(
     if (showUpgradeDialog) {
         AlertDialog(
             onDismissRequest = { showUpgradeDialog = false },
-            title = { Text(text = "WoW Forever Has Launched", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold) },
+            title = { Text(text = "WoW Forever Has Launched", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Modern.Text) },
             text = {
                 Text(
                     text = "Blizzard has moved WoW Forever from beta to its full release, and the beta client in this folder " +
@@ -706,10 +533,10 @@ fun WoWForeverScreen(
             confirmButton = {
                 Button(
                     onClick = ::performInstall,
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = Modern.Accent, contentColor = Color.White),
                     shape = RoundedCornerShape(10.dp),
                 ) {
-                    Text("UPGRADE NOW", fontWeight = FontWeight.Bold)
+                    Text("Upgrade now", fontWeight = FontWeight.Medium)
                 }
             },
             dismissButton = {
@@ -718,14 +545,14 @@ fun WoWForeverScreen(
                         showUpgradeDialog = false
                         folderPicker.launch(null)
                     }) {
-                        Text("CHOOSE FOLDER", color = WowMuted)
+                        Text("Choose folder", color = Modern.Muted)
                     }
                     TextButton(onClick = { showUpgradeDialog = false }) {
-                        Text("LATER", color = WowMuted)
+                        Text("Later", color = Modern.Muted)
                     }
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Modern.SurfaceHigh,
             shape = RoundedCornerShape(16.dp),
         )
     }
@@ -733,7 +560,7 @@ fun WoWForeverScreen(
     if (showStoragePermissionDialog) {
         AlertDialog(
             onDismissRequest = { showStoragePermissionDialog = false },
-            title = { Text(text = "Storage Permission Required", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowGold) },
+            title = { Text(text = "Storage Permission Required", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Modern.Text) },
             text = {
                 Text(
                     text = "Android requires 'All files access' for WoW Forever to read and update game files in this directory.\n\nPlease enable 'Allow access to manage all files' on the next screen.",
@@ -748,18 +575,18 @@ fun WoWForeverScreen(
                         showStoragePermissionDialog = false
                         StorageUtils.requestManageExternalStoragePermission(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = Modern.Accent, contentColor = Color.White),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("OPEN SETTINGS", fontWeight = FontWeight.Bold)
+                    Text("Open settings", fontWeight = FontWeight.Medium)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showStoragePermissionDialog = false }) {
-                    Text("CANCEL", color = WowMuted)
+                    Text("Cancel", color = Modern.Muted)
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Modern.SurfaceHigh,
             shape = RoundedCornerShape(16.dp),
         )
     }
@@ -775,7 +602,7 @@ fun WoWForeverScreen(
                         text = "App Update Available (v${update.version})",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
-                        color = WowGold,
+                        color = Modern.Text,
                     )
                 },
                 text = {
@@ -797,14 +624,14 @@ fun WoWForeverScreen(
                             Text(
                                 text = "Downloading: ${(appUpdateProgress * 100).toInt()}%",
                                 fontSize = 12.sp,
-                                color = WowGold,
+                                color = Modern.Text,
                                 fontWeight = FontWeight.Bold,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             LinearProgressIndicator(
                                 progress = { appUpdateProgress },
                                 modifier = Modifier.fillMaxWidth(),
-                                color = WowGold,
+                                color = Modern.Text,
                             )
                         }
                     }
@@ -813,7 +640,7 @@ fun WoWForeverScreen(
                     Button(
                         onClick = ::performAppUpdate,
                         enabled = !isDownloadingAppUpdate,
-                        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = Modern.Accent, contentColor = Color.White),
                         shape = RoundedCornerShape(10.dp),
                     ) {
                         Text(
@@ -829,11 +656,11 @@ fun WoWForeverScreen(
                 dismissButton = {
                     if (!isDownloadingAppUpdate) {
                         TextButton(onClick = { showAppUpdateDialog = false }) {
-                            Text("LATER", color = WowMuted)
+                            Text("Later", color = Modern.Muted)
                         }
                     }
                 },
-                containerColor = Color(0xFF1B2838),
+                containerColor = Modern.SurfaceHigh,
                 shape = RoundedCornerShape(16.dp),
             )
         }
@@ -847,7 +674,7 @@ fun WoWForeverScreen(
                     text = "Install Permission Required",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
-                    color = WowGold,
+                    color = Modern.Text,
                 )
             },
             text = {
@@ -865,20 +692,21 @@ fun WoWForeverScreen(
                         pendingInstallPermission = true
                         AppUpdater.openInstallPermissionSettings(context)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
+                    colors = ButtonDefaults.buttonColors(containerColor = Modern.Accent, contentColor = Color.White),
                     shape = RoundedCornerShape(10.dp),
                 ) {
-                    Text("OPEN SETTINGS", fontWeight = FontWeight.Bold)
+                    Text("Open settings", fontWeight = FontWeight.Medium)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAppUpdatePermissionDialog = false }) {
-                    Text("CANCEL", color = WowMuted)
+                    Text("Cancel", color = Modern.Muted)
                 }
             },
-            containerColor = Color(0xFF1B2838),
+            containerColor = Modern.SurfaceHigh,
             shape = RoundedCornerShape(16.dp),
         )
+    }
     }
 }
 
@@ -988,125 +816,6 @@ object GamePath {
 
     private fun productsOf(root: File) = WowClientDownloader.installedProducts(File(root, BUILD_INFO))
 }
-
-@Composable
-private fun InstallCard(isUpgrade: Boolean, gamePath: String, freeSpaceBytes: Long, enabled: Boolean, onChangeLocation: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(0.9f)
-            .border(1.dp, WowGold.copy(alpha = 0.6f), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E2838).copy(alpha = 0.85f)),
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Download, contentDescription = null, tint = WowGold, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                SectionTitle(if (isUpgrade) "WOW FOREVER HAS LAUNCHED" else "INSTALL WORLD OF WARCRAFT", WowGold)
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = if (isUpgrade) {
-                    "This folder has the Forever beta, which Blizzard is retiring. Upgrade to install the full release into " +
-                        "$FLAVOR_DIR/. Your existing game data is reused, so only the new client downloads (about 100 MB)."
-                } else {
-                    "Downloads the ARM64 game client and archive indexes (about 250 MB) from Blizzard's CDN. The rest of the " +
-                        "game streams in as you play and can grow past 50 GB, so pick a location with room to spare."
-                },
-                fontSize = 12.sp,
-                color = Color(0xFFCBD5E1),
-                lineHeight = 16.sp,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Install location: $gamePath (${"%.1f".format(freeSpaceBytes / 1e9)} GB free)",
-                fontSize = 11.sp,
-                color = WowSubtle,
-            )
-            if (!isUpgrade) {
-                LinkButton("Change Install Location", Icons.Default.FolderOpen, enabled = enabled, onClick = onChangeLocation)
-                Text(
-                    text = "Already copied the game from a PC? Use Locate Existing Files below.",
-                    fontSize = 11.sp,
-                    color = WowSubtle,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String, color: Color) {
-    Text(text = text, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, color = color)
-}
-
-@Composable
-private fun PrimaryButton(text: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth(0.85f).height(56.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = WowBronze, contentColor = Color.White),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(text = text, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-    }
-}
-
-@Composable
-private fun LinkButton(text: String, icon: ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = WowMuted)
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(text, fontSize = 12.sp, color = WowMuted)
-    }
-}
-
-@Composable
-private fun <T> OptionMenu(
-    text: String,
-    icon: ImageVector,
-    options: List<T>,
-    selected: T,
-    optionLabel: (T) -> String,
-    enabled: Boolean,
-    onSelect: (T) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        LinkButton(text, icon, enabled) { expanded = true }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option)) },
-                    trailingIcon = { if (option == selected) Icon(Icons.Default.Check, contentDescription = null, tint = WowGold) },
-                    onClick = {
-                        expanded = false
-                        if (option != selected) onSelect(option)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CheckItem(label: String, ready: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (ready) Icons.Default.CheckCircle else Icons.Default.Warning,
-            contentDescription = null,
-            tint = if (ready) Color(0xFF48BB78) else Color(0xFFED8936),
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(text = label, fontSize = 13.sp, color = if (ready) Color(0xFFCBD5E1) else Color(0xFFED8936))
-    }
-}
-
-private class StorageAccessDeniedException(cause: Throwable) : Exception(cause)
 
 private fun Throwable.isPermissionDenied() =
     message?.let { "EPERM" in it || "Operation not permitted" in it } == true

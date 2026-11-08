@@ -1821,7 +1821,12 @@ fun XServerScreen(
                         false
                     }
                     if (!controlsHandled) {
-                        PluviaApp.touchpadView?.onTouchEvent(event)
+                        val wowTouch = PluviaApp.wowTouchView?.takeIf { it.handles(event) }
+                        if (wowTouch != null) {
+                            wowTouch.onTouchEvent(event)
+                        } else {
+                            PluviaApp.touchpadView?.onTouchEvent(event)
+                        }
                     }
                 }
                 true
@@ -2291,6 +2296,26 @@ fun XServerScreen(
             }
             val touchpadHost = if (isPortrait) gameHost else frameLayout
             touchpadHost.addView(PluviaApp.touchpadView)
+
+            // The Blizzard launcher's WoW touch controls (walk on the left, camera on the right) in place of the
+            // touchpad, unless switched off on the setup screen. Touches reach it from the filter above.
+            PluviaApp.wowTouchView = if (
+                !isPortrait &&
+                context.getSharedPreferences("wow_forever", Context.MODE_PRIVATE)
+                    .getBoolean(app.gamenative.wowinput.WowTouchView.PREF_ENABLED, true)
+            ) {
+                app.gamenative.wowinput.WowTouchView(
+                    context,
+                    xServerView.getxServer(),
+                    onKeyboard = { PluviaApp.wowTouchView?.let { showSoftKeyboard(it, "wow_touch_keyboard") } },
+                    onMenu = {
+                        PluviaApp.wowTouchView?.release()
+                        showQuickMenu = true
+                    },
+                ).also { frameLayout.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+            } else {
+                null
+            }
 
             PluviaApp.inputControlsManager = InputControlsManager(context)
             RadialMenuCoordinator.install(
