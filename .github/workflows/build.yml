@@ -5,6 +5,11 @@ on:
     branches: ["**"]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a GitHub release with this tag (e.g. v1.0.0). Leave empty for a build only."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -59,7 +64,10 @@ jobs:
           path: WoW-Forever.apk
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: WoW Forever ${{ inputs.release_tag || github.ref_name }}
           files: WoW-Forever.apk
