@@ -1,86 +1,64 @@
-name: Build APK
+name: Build WoW Forever
 
+# Builds the app with Winlator (scripts/prepare-winlator.sh, cached by its pin and patches), runs the unit tests,
+# and publishes every build as a GitHub release with the APK attached (wowforever-build-N).
 on:
   push:
-    branches: ["**"]
-    tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Publish a GitHub release with this tag (e.g. v1.0.0). Leave empty for a build only."
-        required: false
-        default: ""
-
 permissions:
   contents: write
-
+concurrency:
+  group: wowforever-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-
+          java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
-
-      - name: Fetch runtime components
-        run: bash tools/fetch_components.sh
-
-      - name: Configure signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        if: env.KEYSTORE_BASE64 != ''
+      - name: Install build tools
         run: |
-          mkdir -p app/keystores
-          echo "$KEYSTORE_BASE64" | base64 -d > app/keystores/release.jks
-          {
-            echo "storeFile=keystores/release.jks"
-            echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
-          } > app/keystores/keystore.properties
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;24.0.8215888" "cmake;3.22.1" > /dev/null
 
-      - name: Build
-        run: ./gradlew --no-daemon assembleModernRelease
-
-      - name: Rename APK
-        run: |
-          apk=$(find app/build/outputs/apk/modern/release -name '*.apk' | head -n1)
-          mv "$apk" WoW-Forever.apk
-
-      - name: Input rule and touch control tests
-        run: ./gradlew --no-daemon testModernDebugUnitTest --tests 'app.gamenative.wowinput.*' --tests 'app.gamenative.rules.*' --tests 'com.winlator.inputcontrols.BindingComboTest' --tests 'app.gamenative.data.TouchGestureConfigTest'
-
-      - name: Release tag
-        id: tag
-        run: |
-          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n1)
-          echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
-          if [ -z "${{ inputs.release_tag }}" ]; then
-            if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
-              echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-            else
-              echo "tag=v$version" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
-      # Every build is published as a GitHub release with the APK attached: the release for the app's
-      # versionName (v1.1.0...), replaced by later pushes until the version is bumped.
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      - name: Look for Winlator
+        id: winlator
+        uses: actions/cache/restore@v4
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: WoW Forever ${{ steps.tag.outputs.tag }}
-          make_latest: true
-          files: WoW-Forever.apk
+          path: app/winlator
+          key: wf-winlator-v1-${{ hashFiles('winlator-version.env', 'patches/winlator/**', 'scripts/prepare-winlator.sh', 'scripts/winlator-rewrite.py') }}
+      - name: Prepare Winlator
+        if: steps.winlator.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq python3-zstandard zstd > /dev/null
+          scripts/prepare-winlator.sh
+      - name: Save Winlator
+        if: steps.winlator.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: app/winlator
+          key: ${{ steps.winlator.outputs.cache-primary-key }}
+
+      - run: chmod +x gradlew
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon -PwfVersionCode=${{ github.run_number }} -PwfVersionName=2.0.${{ github.run_number }}
+      - name: Build the APK
+        run: ./gradlew :app:assembleDebug --no-daemon -PwfVersionCode=${{ github.run_number }} -PwfVersionName=2.0.${{ github.run_number }}
+      - run: cp app/build/outputs/apk/debug/app-debug.apk WoW-Forever.apk
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="wowforever-build-${{ github.run_number }}"
+          gh api -X POST "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/$tag" -f sha="${{ github.sha }}" > /dev/null
+          gh release create "$tag" WoW-Forever.apk --repo "${{ github.repository }}" --verify-tag --latest \
+            --title "WoW Forever 2.0.${{ github.run_number }}" \
+            --notes "Install WoW-Forever.apk on the phone. Built on Winlator 11.2 (brunodev85/winlator-app a030f55). Commit ${{ github.sha }}."

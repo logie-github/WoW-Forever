@@ -1,0 +1,125 @@
+plugins {
+	id 'com.android.application'
+	id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+// CI passes the version (-PwfVersionCode, -PwfVersionName); local builds use these.
+def prop = { String name, String fallback ->
+	def value = project.hasProperty(name) ? project.property(name).toString() : ""
+	value.isEmpty() ? fallback : value
+}
+
+// The game's runtime, Winlator (scripts/prepare-winlator.sh puts it in app/winlator).
+def winlator = file("winlator")
+if (!new File(winlator, "java").isDirectory()) {
+	throw new GradleException("Winlator isn't in app/winlator: run scripts/prepare-winlator.sh")
+}
+
+android {
+	namespace = 'com.logie.wowforever'
+	compileSdk = 35
+
+	buildFeatures {
+		compose = true
+		buildConfig = true
+	}
+
+	defaultConfig {
+		applicationId = 'com.logie.wowforever'
+		minSdk = 26
+		// 28, like Termux and Winlator: Android lets apps that target 28 or lower run programs from their own
+		// storage, which is where Wine runs from.
+		//noinspection ExpiredTargetSdkVersion
+		targetSdk = 28
+		versionCode = prop('wfVersionCode', '1').toInteger()
+		versionName = prop('wfVersionName', '2.0')
+		buildConfigField "String", "UPDATE_REPO", "\"${prop('wfUpdateRepo', 'logie-github/WoW-Forever')}\""
+		buildConfigField "String", "RELEASE_TAG_PREFIX", "\"wowforever-build\""
+
+		ndk {
+			// Phones only: the runtime is built for arm64.
+			abiFilters "arm64-v8a"
+		}
+	}
+
+	// Winlator's native code (its X server, renderers, audio), with the NDK and CMake it's made for.
+	ndkVersion = "24.0.8215888"
+	externalNativeBuild {
+		cmake {
+			path = file("winlator/cpp/CMakeLists.txt")
+			version = "3.22.1"
+		}
+	}
+
+	packaging {
+		jniLibs {
+			// Winlator loads its libraries from files.
+			useLegacyPackaging = true
+		}
+	}
+
+	// One key for every build, so each release installs over the last.
+	signingConfigs {
+		sideload {
+			storeFile = file('sideload.keystore')
+			storePassword = 'wowforever'
+			keyAlias = 'wowforever'
+			keyPassword = 'wowforever'
+		}
+	}
+	buildTypes {
+		debug { signingConfig = signingConfigs.sideload }
+		release {
+			signingConfig = signingConfigs.sideload
+			minifyEnabled = true
+			shrinkResources = false
+			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+		}
+	}
+
+	compileOptions {
+		sourceCompatibility JavaVersion.VERSION_17
+		targetCompatibility JavaVersion.VERSION_17
+	}
+
+	sourceSets {
+		main {
+			assets.srcDirs += ['winlator/assets']
+			java.srcDirs += ['winlator/java']
+			res.srcDirs += ['winlator/res']
+			jniLibs.srcDirs += ['winlator/jniLibs']
+		}
+	}
+
+	androidResources {
+		// Already compressed.
+		noCompress += ['tzst', 'zip']
+	}
+
+	lint {
+		abortOnError = false
+		checkReleaseBuilds = false
+	}
+}
+
+dependencies {
+	implementation platform('androidx.compose:compose-bom:2025.04.00')
+	implementation 'androidx.compose.ui:ui'
+	implementation 'androidx.compose.material3:material3'
+	implementation 'androidx.compose.material:material-icons-extended'
+	implementation 'androidx.activity:activity-compose:1.9.3'
+	implementation 'androidx.core:core-ktx:1.12.0'
+	implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+	implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+	// Winlator's.
+	implementation 'androidx.appcompat:appcompat:1.6.1'
+	implementation 'com.google.android.material:material:1.11.0'
+	implementation 'org.apache.commons:commons-compress:1.27.1'
+	implementation 'org.tukaani:xz:1.10'
+	implementation 'androidx.preference:preference:1.2.1'
+	implementation 'androidx.lifecycle:lifecycle-process:2.8.7'
+	implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+	compileOnly 'org.jspecify:jspecify:1.0.0'
+	testImplementation 'junit:junit:4.13.2'
+	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit:2.3.21'
+}

@@ -1,42 +1,11 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
-
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
-
-
-
-
-# From Winlator
+# commons-compress refers to optional codecs (brotli, ...) the app doesn't ship.
+-dontwarn org.apache.commons.compress.**
+-dontwarn org.brotli.**
+-dontwarn org.objectweb.asm.**
+# Winlator: its native code calls into its Java classes by name, and it finds some by reflection.
 -dontobfuscate
-
-# Timber Logging
--keep class timber.log.Timber { *; }
--keep class app.gamenative.ReleaseTree { *; }
-
-
--keep class horizon.** { *; }
--keep class com.meta.horizon.** { *; }
--dontwarn horizon.**
--dontwarn com.meta.horizon.**
-
-# Samsung Performance SDK (bundled stub jar, referenced by powercontrol Samsung driver)
--keep class com.samsung.sdk.sperf.** { *; }
--dontwarn com.samsung.sdk.sperf.**
-
+-keep class com.winlator.** { *; }
+-dontwarn com.winlator.**
+# zstd-jni (Winlator's archives): its native code uses its classes' fields and methods by name.
+-keep class com.github.luben.zstd.** { *; }
+-dontwarn com.github.luben.zstd.**

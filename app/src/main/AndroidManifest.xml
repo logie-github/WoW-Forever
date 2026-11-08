@@ -1,87 +1,81 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:tools="http://schemas.android.com/tools"
-    xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- Winlator draws with OpenGL ES and Vulkan. -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
 
-    <uses-feature
-        android:glEsVersion="0x00020000"
-        android:required="true" />
-    <uses-feature
-        android:name="android.hardware.sensor.gyroscope"
-        android:required="false" />
-
+    <!-- Blizzard's installer (downloaded from Blizzard), and Battle.net and the game themselves. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Winlator: the game keeps running with the screen of another app in front, sound, rumble. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:node="remove" />
 
     <application
-        android:name=".PluviaApp"
-        android:usesCleartextTraffic="true"
-        android:requestLegacyExternalStorage="true"
-        android:allowBackup="false"
-        android:extractNativeLibs="true"
-        android:icon="${icon}"
-        android:banner="@drawable/ic_banner"
-        android:isGame="true"
         android:label="@string/app_name"
+        android:icon="@mipmap/ic_wowforever"
+        android:roundIcon="@mipmap/ic_wowforever_round"
+        android:theme="@style/WfTheme"
+        android:allowBackup="false"
         android:supportsRtl="true"
         android:largeHeap="true"
-        android:theme="@style/Theme.Pluvia"
-        android:allowAudioPlaybackCapture="true"
         android:appCategory="game"
-        tools:targetApi="29">
-        <!--
-         android:windowSoftInputMode must always be in the activity block.
-         IME padding with composables like 'Scaffold' will have terrible resizing consequences, if in the activity tag.
-        -->
+        android:isGame="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:screenOrientation="${screenOrientation}"
-            android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
-            android:theme="@style/Theme.Pluvia">
-        </activity>
-
-        <activity-alias
-            android:name=".MainActivityAliasDefault"
-            android:enabled="true"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher"
-            android:roundIcon="@mipmap/ic_launcher_round"
-            android:banner="@drawable/ic_banner"
-            android:logo="@drawable/ic_banner"
-            android:label="@string/app_name"
-            android:targetActivity=".MainActivity">
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-        </activity-alias>
+        </activity>
 
-        <!-- FileProvider for secure file sharing (for APK installation) -->
+        <!-- Winlator: its game screen (its X server, with Wine and Box64 behind it), the screens its code refers to,
+             and the service that keeps the game alive in the background. -->
+        <activity
+            android:name="com.winlator.XServerDisplayActivity"
+            android:exported="false"
+            android:theme="@style/AppThemeFullscreenDark"
+            android:supportsPictureInPicture="true"
+            android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation"
+            android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name="com.winlator.ControlsEditorActivity"
+            android:exported="false"
+            android:theme="@style/AppThemeFullscreenDark"
+            android:screenOrientation="sensorLandscape" />
+        <activity
+            android:name="com.winlator.ExternalControllerBindingsActivity"
+            android:exported="false"
+            android:theme="@style/AppThemeDark"
+            android:screenOrientation="sensor" />
+        <activity
+            android:name="com.winlator.MainActivity"
+            android:exported="false"
+            android:theme="@style/AppThemeDark"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation" />
+        <service
+            android:name="com.winlator.services.ForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
+            android:authorities="${applicationId}.filesprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_provider_paths" />
+                android:resource="@xml/file_paths" />
         </provider>
     </application>
-
 </manifest>
