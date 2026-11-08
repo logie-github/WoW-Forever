@@ -289,7 +289,8 @@ fun ControllerBindingDialog(
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
 
-                            if (selectedBindings.size > 1) {
+                            // One press, one function (Blizzard's terms of use): no sequence mode to choose.
+                            if (false && selectedBindings.size > 1) {
                                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                                     SegmentedButton(
                                         selected = selectedMode == BindingCombo.Mode.SIMULTANEOUS,

@@ -1364,7 +1364,7 @@ public class ControlElement {
                         this.states[i] = bindingCombo.isSingleBinding() || nextState;
                     }
                     else {
-                        boolean state = binding.isMouseMove() ? (states[i] || states[(i+2)%4]) : states[i];
+                        boolean state = binding.isMouseMove() ? (states[i] || states[(i+2)%4]) : oneDirection(states, deltaX, deltaY)[i];
                         if (binding.isMouseMove() || this.states[i] != state) {
                             handleBindingInputEvent(i, state, value);
                         }
@@ -1434,9 +1434,12 @@ public class ControlElement {
                             }
                             this.states[i] = false;
                         }
-                        else if (this.states[i] != states[i]) {
-                            handleBindingInputEvent(i, states[i], value);
-                            this.states[i] = states[i];
+                        else {
+                            boolean state = oneDirection(states, deltaX, deltaY)[i];
+                            if (this.states[i] != state) {
+                                handleBindingInputEvent(i, state, value);
+                                this.states[i] = state;
+                            }
                         }
                     }
                 }
@@ -1444,8 +1447,14 @@ public class ControlElement {
                 if (cursorDx != 0 || cursorDy != 0) inputControlsView.getXServer().injectPointerMoveDelta(cursorDx, cursorDy);
             }
             else {
-                final boolean[] states = {deltaY <= -DPAD_DEAD_ZONE, deltaX >= DPAD_DEAD_ZONE, deltaY >= DPAD_DEAD_ZONE, deltaX <= -DPAD_DEAD_ZONE};
-                if (handleRadialMenuDirectionalMove(pointerId, states, x, y)) return true;
+                final boolean[] rawStates = {deltaY <= -DPAD_DEAD_ZONE, deltaX >= DPAD_DEAD_ZONE, deltaY >= DPAD_DEAD_ZONE, deltaX <= -DPAD_DEAD_ZONE};
+                if (handleRadialMenuDirectionalMove(pointerId, rawStates, x, y)) return true;
+                // One press, one function: keys follow the strongest direction only; mouse moves keep both axes.
+                final boolean[] one = oneDirection(rawStates, deltaX, deltaY);
+                final boolean[] states = new boolean[4];
+                for (byte i = 0; i < 4; i++) {
+                    states[i] = getBindingComboAt(i).getPrimaryBinding().isMouseMove() ? rawStates[i] : one[i];
+                }
 
                 // Release transitions first because opposing stick and mouse-move
                 // bindings share an axis. An inactive direction must not clear an
@@ -1459,7 +1468,10 @@ public class ControlElement {
 
                 for (byte i = 0; i < 4; i++) {
                     float value = i == 1 || i == 3 ? deltaX : deltaY;
-                    if (states[i]) handleBindingInputEvent(i, true, value);
+                    // A key goes down once when its direction starts (no repeated presses while held); a mouse move
+                    // binding moves with every update.
+                    boolean mouseMove = getBindingComboAt(i).getPrimaryBinding().isMouseMove();
+                    if (states[i] && (mouseMove || !this.states[i])) handleBindingInputEvent(i, true, value);
                     this.states[i] = states[i];
                 }
 
@@ -1473,6 +1485,22 @@ public class ControlElement {
             return true;
         }
         else return false;
+    }
+
+    /**
+     * One press, one function (Blizzard's terms of use): of the four directions (up, right, down, left), only the
+     * strongest, so one thumb never holds two movement keys at once.
+     */
+    public static boolean[] oneDirection(boolean[] states, float dx, float dy) {
+        boolean[] one = new boolean[4];
+        if (Math.abs(dy) >= Math.abs(dx)) {
+            one[0] = states[0];
+            one[2] = states[2];
+        } else {
+            one[1] = states[1];
+            one[3] = states[3];
+        }
+        return one;
     }
 
     public boolean handleTouchUp(int pointerId) {

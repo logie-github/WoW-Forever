@@ -817,6 +817,8 @@ object GamePath {
     private fun productsOf(root: File) = WowClientDownloader.installedProducts(File(root, BUILD_INFO))
 }
 
+private class StorageAccessDeniedException(cause: Throwable) : Exception(cause)
+
 private fun Throwable.isPermissionDenied() =
     message?.let { "EPERM" in it || "Operation not permitted" in it } == true
 

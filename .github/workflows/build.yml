@@ -63,8 +63,8 @@ jobs:
           name: WoW-Forever
           path: WoW-Forever.apk
 
-      - name: Touch control tests
-        run: ./gradlew --no-daemon testModernDebugUnitTest --tests 'app.gamenative.wowinput.*'
+      - name: Input rule and touch control tests
+        run: ./gradlew --no-daemon testModernDebugUnitTest --tests 'app.gamenative.wowinput.*' --tests 'app.gamenative.rules.*' --tests 'com.winlator.inputcontrols.BindingComboTest' --tests 'app.gamenative.data.TouchGestureConfigTest'
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''

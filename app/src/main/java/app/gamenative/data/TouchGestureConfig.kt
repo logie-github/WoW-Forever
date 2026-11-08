@@ -334,18 +334,12 @@ data class TouchGestureConfig(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .take(MAX_ACTION_COMBO_SIZE)
-            val normalized = if (sequence) filtered else filtered.sortedBy { actionComboSortGroup(it) }
+            // One press, one function (Blizzard's terms): no sequences, and a combo is modifiers plus one key.
+            val normalized = onePress(filtered.sortedBy { actionComboSortGroup(it) })
             return when (normalized.size) {
                 0 -> ACTION_LEFT_CLICK
                 1 -> normalized.first()
-                else -> if (sequence) {
-                    ACTION_SEQUENCE_PREFIX +
-                        sequenceDelayMs.coerceIn(MIN_ACTION_SEQUENCE_DELAY_MS, MAX_ACTION_SEQUENCE_DELAY_MS) +
-                        ":" +
-                        normalized.joinToString(ACTION_COMBO_SEPARATOR)
-                } else {
-                    ACTION_COMBO_PREFIX + normalized.joinToString(ACTION_COMBO_SEPARATOR)
-                }
+                else -> ACTION_COMBO_PREFIX + normalized.joinToString(ACTION_COMBO_SEPARATOR)
             }
         }
 
@@ -360,12 +354,23 @@ data class TouchGestureConfig(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .take(MAX_ACTION_COMBO_SIZE)
-            return if (sequence) parts else parts.sortedBy { actionComboSortGroup(it) }
+            // Saved sequences and multi-key combos are cut down to one function: the modifiers and one key.
+            return onePress(parts.sortedBy { actionComboSortGroup(it) })
         }
 
+        /**
+         * One press, one function (Blizzard's terms of use): never a sequence of inputs from one press. Stored
+         * sequences are read as a single press of their modifiers and one key.
+         */
         @JvmStatic
-        fun isActionSequence(action: String?): Boolean {
-            return action?.startsWith(ACTION_SEQUENCE_PREFIX) == true
+        fun isActionSequence(@Suppress("UNUSED_PARAMETER") action: String?): Boolean = false
+
+        /** The modifiers (Ctrl, Shift, Alt) and at most one other key or button: what a single press may send. */
+        @JvmStatic
+        fun onePress(parts: List<String>): List<String> {
+            val modifiers = parts.filter { actionComboSortGroup(it) == 0 }
+            val key = parts.lastOrNull { actionComboSortGroup(it) != 0 }
+            return modifiers + listOfNotNull(key)
         }
 
         @JvmStatic

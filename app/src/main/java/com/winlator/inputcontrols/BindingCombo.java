@@ -82,8 +82,17 @@ public final class BindingCombo {
             if (normalized.size() == MAX_BINDINGS) break;
         }
         if (normalized.isEmpty()) return NONE;
-        if (mode != Mode.SEQUENCE) normalized.sort(Comparator.comparingInt(BindingCombo::sortGroup));
-        return new BindingCombo(normalized, mode, sequenceDelayMs);
+        // One press, one function (Blizzard's terms of use): never a sequence, and a combo is its modifiers
+        // (Ctrl, Shift, Alt) plus at most one other key or button. Saved sequences and multi-key combos are cut down.
+        normalized.sort(Comparator.comparingInt(BindingCombo::sortGroup));
+        ArrayList<Binding> onePress = new ArrayList<>();
+        Binding key = null;
+        for (Binding binding : normalized) {
+            if (sortGroup(binding) == 0) onePress.add(binding);
+            else key = binding;
+        }
+        if (key != null) onePress.add(key);
+        return new BindingCombo(onePress, Mode.SIMULTANEOUS, DEFAULT_SEQUENCE_DELAY_MS);
     }
 
     public static BindingCombo fromJsonValue(Object value) {

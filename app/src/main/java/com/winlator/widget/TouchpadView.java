@@ -868,12 +868,10 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
             float dist = (float) Math.hypot(x - lastTapX, y - lastTapY);
             if ((now - lastTapTime) < gestureConfig.getDoubleTapDelay()
                     && dist < TouchGestureConfig.DOUBLE_TAP_DISTANCE_PX) {
-                // Double-tap detected — send two rapid clicks so Windows/Wine
-                // reliably recognises the double-click pattern.
+                // Double-tap detected: the second tap is one click of its own (one press, one function);
+                // with the first tap's click, Windows sees a double click.
                 cancelLongPressTimer();
                 doubleTapDetected = true;
-                injectClick(TouchGestureConfig.ACTION_LEFT_CLICK);
-                injectRelease(TouchGestureConfig.ACTION_LEFT_CLICK);
                 injectClick(TouchGestureConfig.ACTION_LEFT_CLICK);
                 injectRelease(TouchGestureConfig.ACTION_LEFT_CLICK);
                 notifyHighlight(event.getX(actionIndex), event.getY(actionIndex));

@@ -420,8 +420,8 @@ class PhysicalControllerHandler(
         var pulseImmediately = false
         synchronized(scrollRepeatLock) {
             if (isActionDown) {
+                // One press, one function (Blizzard's terms of use): one wheel step per press, never repeated while held.
                 pulseImmediately = activeScrollBindings.add(binding)
-                createScrollRepeatTimerLocked()
             } else {
                 activeScrollBindings.remove(binding)
                 if (activeScrollBindings.isEmpty()) {
@@ -467,6 +467,19 @@ class PhysicalControllerHandler(
         xServer?.injectPointerButtonRelease(pointerButton)
     }
 
+    /** Whether the combo presses a keyboard key (not a gamepad input or a mouse move). */
+    private fun isKeyCombo(combo: com.winlator.inputcontrols.BindingCombo): Boolean {
+        val binding = combo.primaryBinding
+        return binding != Binding.NONE && !binding.isGamepad && !binding.isMouseMove
+    }
+
+    /** Whether either direction of [axis] is bound to a keyboard key. */
+    private fun isKeyBound(controller: ExternalController, axis: Int): Boolean =
+        listOf(1.toByte(), (-1).toByte()).any { sign ->
+            controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axis, sign))
+                ?.let { isKeyCombo(it.bindingCombo) } == true
+        }
+
     /**
      * Process analog stick input and apply bindings.
      * Extracted from InputControlsView.processJoystickInput()
@@ -488,6 +501,14 @@ class PhysicalControllerHandler(
             controller.state.dPadX.toFloat(),
             controller.state.dPadY.toFloat()
         )
+        // One press, one function (Blizzard's terms of use): a stick or pad bound to keyboard keys holds the key of
+        // its strongest direction only, never two keys at once. Gamepad and mouse bindings keep both axes.
+        for (pair in 0 until axes.size / 2) {
+            val a = pair * 2
+            val b = a + 1
+            val minor = if (Math.abs(values[a]) >= Math.abs(values[b])) b else a
+            if (isKeyBound(controller, axes[minor])) values[minor] = 0f
+        }
 
         for (i in axes.indices) {
             val posKeyCode = ExternalControllerBinding.getKeyCodeForAxis(axes[i], 1.toByte())
@@ -503,7 +524,8 @@ class PhysicalControllerHandler(
 
                 val wasAlreadyActive = !activeAxisBindings.add(activeSource)
                 controller.getControllerBinding(activeKey)?.let {
-                    if (!it.bindingCombo.isSequence || !wasAlreadyActive) {
+                    // A key goes down once per push of the stick; analog and mouse bindings follow every update.
+                    if (!wasAlreadyActive || !isKeyCombo(it.bindingCombo)) {
                         handleInputEvent(
                             it.bindingCombo,
                             true,

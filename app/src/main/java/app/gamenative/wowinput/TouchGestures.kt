@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// From logie-github/Blizzard (wowinput/), ported from the World of Warcraft app (com.logie.warcraft); unchanged apart from its package.
+// From logie-github/Blizzard (wowinput/), ported from the World of Warcraft app (com.logie.warcraft). Changed: the stick
+// sends one key at a time (four directions), for one press, one function.
 
 package app.gamenative.wowinput
 
@@ -94,7 +95,7 @@ interface GestureOutput {
  * "Controls"):
  *
  * - **Left half, swipe and hold:** walks, like a stick under the thumb (nothing drawn): up W,
- *   down S, left Q and right E (sideways steps), and the diagonals between them. It follows a
+ *   down S, left Q and right E (sideways steps), one key at a time. It follows a
  *   thumb that goes further.
  * - **Right half, drag:** turns the camera and the character (the right button held down in the
  *   middle of the screen, so it never lands on the action bars or the map).
@@ -576,17 +577,16 @@ class TouchGestures(private val out: GestureOutput, density: Float) {
     }
 }
 
-/** The keys for a direction on the screen (y down), in eight directions: W/S forward and back, Q/E sideways. */
+/**
+ * The key for a direction on the screen (y down), in four directions: W forward, S back, Q and E sideways. One key at
+ * a time, never two together: one press, one function (Blizzard's terms of use), so no diagonals.
+ */
 fun directionKeys(dx: Float, dy: Float): Set<Key> {
-    val sector = ((atan2(dy.toDouble(), dx.toDouble()) / (PI / 4)).roundToInt() + 8) % 8
+    val sector = ((atan2(dy.toDouble(), dx.toDouble()) / (PI / 2)).roundToInt() + 4) % 4
     return when (sector) {
         0 -> setOf(Key.E)
-        1 -> setOf(Key.S, Key.E)
-        2 -> setOf(Key.S)
-        3 -> setOf(Key.S, Key.Q)
-        4 -> setOf(Key.Q)
-        5 -> setOf(Key.W, Key.Q)
-        6 -> setOf(Key.W)
-        else -> setOf(Key.W, Key.E)
+        1 -> setOf(Key.S)
+        2 -> setOf(Key.Q)
+        else -> setOf(Key.W)
     }
 }

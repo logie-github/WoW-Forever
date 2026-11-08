@@ -583,20 +583,59 @@ public class InputControlsView extends View {
         }
     }
 
+    /** Axis directions whose keyboard key is held down, so a key goes down once per push of the stick. */
+    private final java.util.HashSet<Integer> activeAxisKeys = new java.util.HashSet<>();
+
+    /** Whether the combo presses a keyboard key (not a gamepad input or a mouse move). */
+    private static boolean isKeyCombo(BindingCombo combo) {
+        Binding binding = combo.getPrimaryBinding();
+        return binding != Binding.NONE && !binding.isGamepad() && !binding.isMouseMove();
+    }
+
+    private static boolean isKeyBoundAxis(ExternalController controller, int axis) {
+        for (byte sign : new byte[]{1, -1}) {
+            ExternalControllerBinding binding = controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axis, sign));
+            if (binding != null && isKeyCombo(binding.getBindingCombo())) return true;
+        }
+        return false;
+    }
+
     private void processJoystickInput(ExternalController controller) {
         ExternalControllerBinding controllerBinding;
         final int[] axes = {MotionEvent.AXIS_X, MotionEvent.AXIS_Y, MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ, MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y};
         final float[] values = {controller.state.thumbLX, controller.state.thumbLY, controller.state.thumbRX, controller.state.thumbRY, controller.state.getDPadX(), controller.state.getDPadY()};
 
+        // One press, one function (Blizzard's terms of use): a stick or pad bound to keyboard keys holds the key of
+        // its strongest direction only. Gamepad and mouse bindings keep both axes.
+        for (int pair = 0; pair < axes.length / 2; pair++) {
+            int a = pair * 2, b = a + 1;
+            int minor = Math.abs(values[a]) >= Math.abs(values[b]) ? b : a;
+            if (isKeyBoundAxis(controller, axes[minor])) values[minor] = 0;
+        }
+
         for (byte i = 0; i < axes.length; i++) {
             if (Math.abs(values[i]) > ControlElement.STICK_DEAD_ZONE) {
-                controllerBinding = controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i])));
-                if (controllerBinding != null) handleInputEvent(controllerBinding.getBindingCombo(), true, values[i]);
+                int keyCode = ExternalControllerBinding.getKeyCodeForAxis(axes[i], Mathf.sign(values[i]));
+                controllerBinding = controller.getControllerBinding(keyCode);
+                if (controllerBinding != null) {
+                    BindingCombo combo = controllerBinding.getBindingCombo();
+                    // A key goes down once; analog and mouse bindings follow every update.
+                    if (!isKeyCombo(combo) || activeAxisKeys.add(keyCode)) handleInputEvent(combo, true, values[i]);
+                }
+                int opposite = ExternalControllerBinding.getKeyCodeForAxis(axes[i], (byte)-Mathf.sign(values[i]));
+                if (activeAxisKeys.remove(opposite)) {
+                    controllerBinding = controller.getControllerBinding(opposite);
+                    if (controllerBinding != null) handleInputEvent(controllerBinding.getBindingCombo(), false, 0);
+                }
             }
             else {
-                controllerBinding = controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axes[i], (byte) 1));
+                int positive = ExternalControllerBinding.getKeyCodeForAxis(axes[i], (byte) 1);
+                int negative = ExternalControllerBinding.getKeyCodeForAxis(axes[i], (byte)-1);
+                activeAxisKeys.remove(positive);
+                activeAxisKeys.remove(negative);
+                controllerBinding = controller.getControllerBinding(positive);
                 if (controllerBinding != null) handleInputEvent(controllerBinding.getBindingCombo(), false, values[i]);
-                controllerBinding = controller.getControllerBinding(ExternalControllerBinding.getKeyCodeForAxis(axes[i], (byte)-1));
+                controllerBinding = controller.getControllerBinding(negative);
                 if (controllerBinding != null) handleInputEvent(controllerBinding.getBindingCombo(), false, values[i]);
             }
         }
@@ -934,7 +973,8 @@ public class InputControlsView extends View {
     }
 
     private void updateShooterSprint(float deltaX, float deltaY) {
-        if (shooterModeConfig == null || !shooterModeConfig.getOuterRingSprintEnabled()) {
+        // One press, one function (Blizzard's terms of use): pushing the stick to its rim never adds a sprint key.
+        if (true || shooterModeConfig == null || !shooterModeConfig.getOuterRingSprintEnabled()) {
             releaseShooterSprint();
             return;
         }
@@ -1110,6 +1150,8 @@ public class InputControlsView extends View {
             deltaY >= digitalDeadzone,    // down
             deltaX <= -digitalDeadzone    // left
         };
+        // One press, one function (Blizzard's terms of use): keys follow the strongest direction only.
+        newStates = ControlElement.oneDirection(newStates, deltaX, deltaY);
 
         for (int i = 0; i < 4; i++) {
             float value = (i == 1 || i == 3) ? deltaX : deltaY;

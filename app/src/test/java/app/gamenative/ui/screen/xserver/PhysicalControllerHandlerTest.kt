@@ -210,40 +210,6 @@ class PhysicalControllerHandlerTest {
         }
     }
 
-    @Test
-    fun `sequence releases mouse movement without another motion event`() {
-        val keyCode = KeyEvent.KEYCODE_BUTTON_A
-        val sequenceDelayMs = 150
-        val controllerBinding = ExternalControllerBinding().apply {
-            setKeyCode(keyCode)
-            setBindingCombo(
-                BindingCombo.fromBindings(
-                    listOf(Binding.MOUSE_MOVE_RIGHT, Binding.KEY_E),
-                    BindingCombo.Mode.SEQUENCE,
-                    sequenceDelayMs,
-                ),
-            )
-        }
-        val controller = mock<ExternalController>()
-        whenever(controller.getControllerBinding(keyCode)).thenReturn(controllerBinding)
-        val profile = mock<ControlsProfile>()
-        whenever(profile.getController(KeyEvent(KeyEvent.ACTION_DOWN, keyCode).deviceId)).thenReturn(controller)
-        whenever(profile.cursorSpeed).thenReturn(1f)
-        val handler = PhysicalControllerHandler(profile, mock<XServer>())
-
-        try {
-            handler.onKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-            shadowOf(Looper.getMainLooper()).idleFor(1, MILLISECONDS)
-            assertEquals(1f, mouseMoveOffset(handler).x, 0f)
-
-            shadowOf(Looper.getMainLooper()).idleFor(sequenceDelayMs.toLong() - 1, MILLISECONDS)
-            assertEquals(0f, mouseMoveOffset(handler).x, 0f)
-            assertNull(privateField(handler, "mouseMoveTimer"))
-        } finally {
-            handler.cleanup()
-        }
-    }
-
     private fun mouseMoveOffset(handler: PhysicalControllerHandler): PointF {
         return privateField(handler, "mouseMoveOffset") as PointF
     }

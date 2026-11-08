@@ -152,11 +152,11 @@ class TouchGesturesTest {
     fun leftSwipeWalksWithSidewaysSteps() {
         gestures.down(0, 200f, 400f, 0)
         gestures.move(0, 200f, 370f) // up
-        gestures.move(0, 170f, 370f) // up and left
+        gestures.move(0, 170f, 370f) // up and left: still up, one key at a time
         gestures.move(0, 160f, 400f) // left
         gestures.move(0, 240f, 400f) // right
         gestures.up(0, 240f, 400f, 2000)
-        assertEquals(listOf("playing", "down W", "down Q", "up W", "up Q", "down E", "up E"), log.events)
+        assertEquals(listOf("playing", "down W", "up W", "down Q", "up Q", "down E", "up E"), log.events)
     }
 
     @Test
@@ -261,20 +261,24 @@ class TouchGesturesTest {
         gestures.move(1, 840f, 300f)
         gestures.cancel()
         assertEquals(
-            listOf("playing", "down W", "down E", "playing", "to 500,240", "press RIGHT", "up W", "up E", "release RIGHT"),
+            listOf("playing", "down E", "playing", "to 500,240", "press RIGHT", "up E", "release RIGHT"),
             log.events,
         )
     }
 
     @Test
-    fun eightDirections() {
+    fun fourDirectionsOneKeyAtATime() {
         assertEquals(setOf(Key.E), directionKeys(1f, 0f))
         assertEquals(setOf(Key.S), directionKeys(0f, 1f))
         assertEquals(setOf(Key.Q), directionKeys(-1f, 0.1f))
         assertEquals(setOf(Key.Q), directionKeys(-1f, -0.1f))
         assertEquals(setOf(Key.W), directionKeys(0f, -1f))
-        assertEquals(setOf(Key.W, Key.E), directionKeys(1f, -1f))
-        assertEquals(setOf(Key.S, Key.Q), directionKeys(-1f, 1f))
+        assertEquals(setOf(Key.W), directionKeys(1f, -2f))
+        assertEquals(setOf(Key.Q), directionKeys(-2f, 1f))
+        for (angle in 0 until 360 step 5) {
+            val radians = Math.toRadians(angle.toDouble())
+            assertEquals(1, directionKeys(kotlin.math.cos(radians).toFloat(), kotlin.math.sin(radians).toFloat()).size)
+        }
     }
 
     @Test

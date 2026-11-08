@@ -40,36 +40,6 @@ class BindingComboTest {
     }
 
     @Test
-    fun `sequence preserves selected order`() {
-        val combo = BindingCombo.fromBindings(
-            listOf(Binding.KEY_E, Binding.MOUSE_LEFT_BUTTON),
-            BindingCombo.Mode.SEQUENCE,
-            220,
-        )
-
-        assertEquals(BindingCombo.Mode.SEQUENCE, combo.mode)
-        assertEquals(220, combo.sequenceDelayMs)
-        assertEquals(listOf(Binding.KEY_E, Binding.MOUSE_LEFT_BUTTON), combo.bindings)
-        assertEquals(Binding.MOUSE_LEFT_BUTTON, combo.primaryBinding)
-        assertEquals("E -> LEFT BUTTON", combo.toString())
-    }
-
-    @Test
-    fun `sequence round trips through json object`() {
-        val expected = BindingCombo.fromBindings(
-            listOf(Binding.KEY_E, Binding.MOUSE_LEFT_BUTTON),
-            BindingCombo.Mode.SEQUENCE,
-            220,
-        )
-
-        val actual = BindingCombo.fromJsonValue(expected.toJsonValue() as JSONObject)
-
-        assertEquals(BindingCombo.Mode.SEQUENCE, actual.mode)
-        assertEquals(220, actual.sequenceDelayMs)
-        assertEquals(expected.bindings, actual.bindings)
-    }
-
-    @Test
     fun `equivalent combos compare equal`() {
         val first = BindingCombo.fromBindings(listOf(Binding.KEY_1, Binding.KEY_CTRL_L))
         val second = BindingCombo.fromBindings(listOf(Binding.KEY_CTRL_L, Binding.KEY_1))
@@ -90,19 +60,6 @@ class BindingComboTest {
 
         assertEquals(BindingCombo.DEFAULT_SEQUENCE_DELAY_MS, expected.sequenceDelayMs)
         assertEquals(expected, actual)
-    }
-
-    @Test
-    fun `legacy embedded sequence fields still load`() {
-        val json = JSONObject()
-            .put("bindings", JSONArray(listOf("KEY_E", "MOUSE_LEFT_BUTTON")))
-            .put("bindingMode", "sequence")
-            .put("bindingDelayMs", 240)
-
-        val combo = BindingCombo.fromJsonValue(json)
-
-        assertEquals(BindingCombo.Mode.SEQUENCE, combo.mode)
-        assertEquals(240, combo.sequenceDelayMs)
     }
 
     @Test

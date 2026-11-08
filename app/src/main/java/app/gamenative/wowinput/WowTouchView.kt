@@ -23,10 +23,11 @@ import java.util.WeakHashMap
  * The Blizzard launcher's World of Warcraft touch controls ([TouchGestures]) over the game screen, in place of
  * Winlator's touchpad. Gestures become the X server's pointer and keys; nothing is drawn over the game.
  *
- * - **Left half, swipe and hold:** walks like a stick (W/S forward and back, Q/E sideways, diagonals between).
+ * - **Left half, swipe and hold:** walks like a stick: one key at a time, W/S forward and back, Q/E sideways.
  * - **Right half, drag:** turns the camera and the character (the right button held in the middle of the world).
- * - **Tap:** a click there; when the game's cursor offers more (talk, loot, attack, gather) a right click follows.
- *   **Double tap:** attacks a selected enemy, presses an action button again, otherwise jumps.
+ * - **Tap:** one left click there (selects).
+ *   **Double tap:** the second tap is one right click on what the first found (attack, talk, loot, gather), another
+ *   press of an action button, or a jump.
  *   **Hold then lift:** right click. **Hold then move:** drags with the left button.
  * - **Two fingers:** pinch zooms (the wheel), tap targets the nearest enemy (Tab), swipe up opens the chat.
  * - **Three-finger tap:** the keyboard. **Four-finger tap:** the app's menu.
@@ -57,9 +58,6 @@ class WowTouchView(
     private val fingerprints = WeakHashMap<Cursor, Long>()
     /** Counts the pointer's moves, so a tap's delayed click can tell another gesture took over. */
     private var pointerMoves = 0
-    private var lastTapAt = Long.MIN_VALUE / 2
-    private var lastTapX = 0f
-    private var lastTapY = 0f
     private var lastTap: TapResult? = null
 
     init {
@@ -135,61 +133,35 @@ class WowTouchView(
     }
 
     /**
-     * The pointer goes there; once the game has drawn its cursor for that spot, a left click; when the cursor
-     * offered more (talk, attack, loot, gather) and still does after the click, a right click, as on a PC.
+     * The pointer goes there and, once the game has drawn its cursor for that spot, one left click: nothing more. One
+     * press, one function (Blizzard's terms of use): talking, looting and attacking are their own input, the second
+     * tap of a double tap or a hold (a right click), never added to this one.
      */
     override fun tapAt(x: Float, y: Float) {
-        val now = SystemClock.uptimeMillis()
-        // The same spot tapped again, not quick enough for a double tap.
-        val again = now - lastTapAt in TouchGestures.DOUBLE_TAP_MS..AGAIN_MS &&
-            Math.hypot((x - lastTapX).toDouble(), (y - lastTapY).toDouble()) <= AGAIN_SLOP_DP * density
-        lastTapAt = now
-        lastTapX = x
-        lastTapY = y
         val tap = TapResult(x, y)
         lastTap = tap
         pointerTo(x, y)
         val moves = pointerMoves
         postDelayed({
             if (moves != pointerMoves) return@postDelayed tap.done(Outcome.PLAIN)
-            val before = cursorHere()
-            val special = cursors.isSpecial(before)
+            // What the cursor offered before the click (talk, attack, loot, gather), for the second tap to use.
+            val special = cursors.isSpecial(cursorHere())
             click(Button.LEFT)
-            when {
-                // An enemy: the click selected it; a second tap attacks.
-                special && cursors.isEnemy(before) == true -> tap.done(Outcome.ENEMY)
-                special -> postDelayed({ interactIfStill(before, moves, tap) }, CURSOR_SETTLE_MS)
-                // Without a cursor to read: the first tap selects, the second talks (or attacks, loots).
-                again && !cursors.readable -> postDelayed({
-                    if (moves == pointerMoves) click(Button.RIGHT)
-                    tap.done(Outcome.INTERACTED)
-                }, CURSOR_SETTLE_MS)
-                else -> tap.done(Outcome.PLAIN)
-            }
+            tap.done(if (special) Outcome.SPECIAL else Outcome.PLAIN)
         }, CURSOR_SETTLE_MS)
     }
 
-    /** The right click, when the cursor that offered it is still there after the left click. */
-    private fun interactIfStill(cursor: Long?, moves: Int, tap: TapResult) {
-        if (moves == pointerMoves && cursors.confirms(cursor, cursorHere())) {
-            click(Button.RIGHT)
-            tap.done(Outcome.INTERACTED)
-        } else {
-            tap.done(Outcome.PLAIN)
-        }
-    }
-
-    /** The second tap of a double tap: attack the enemy the first selected; on the action bars, press again; else jump. */
+    /**
+     * The second tap of a double tap, one function of its own: on the action bars, another press of the button; after
+     * a first tap on something the cursor offered more for (an enemy, an NPC, loot), the right click that uses it
+     * (attack, talk, loot); otherwise a jump.
+     */
     override fun doubleTapAt(x: Float, y: Float) {
         if (ScreenZones.isActionBars(x, y, width.toFloat(), height.toFloat())) return tapAt(x, y)
         val first = lastTap ?: return jump()
         val far = Math.hypot((first.x - x).toDouble(), (first.y - y).toDouble()) > AGAIN_SLOP_DP * density
         first.whenDone { outcome ->
-            when {
-                outcome == Outcome.ENEMY && !far -> interactAt(x, y)
-                outcome == Outcome.INTERACTED -> { if (far) tapAt(x, y) }
-                else -> jump()
-            }
+            if (outcome == Outcome.SPECIAL && !far) interactAt(x, y) else jump()
         }
     }
 
@@ -204,9 +176,9 @@ class WowTouchView(
 
     private fun jump() = tap(Key.SPACE)
 
-    private enum class Outcome { PLAIN, ENEMY, INTERACTED }
+    private enum class Outcome { PLAIN, SPECIAL }
 
-    /** What a tap did, once it's known (its clicks wait for the game). */
+    /** What a tap found, once its click is done. */
     private class TapResult(val x: Float, val y: Float) {
         private var outcome: Outcome? = null
         val result: Outcome? get() = outcome
@@ -224,7 +196,7 @@ class WowTouchView(
         }
     }
 
-    /** Once the game knows the pointer is there, the right click. */
+    /** Once the game knows the pointer is there, the right click (the second tap's one function). */
     private fun interactAt(x: Float, y: Float) {
         pointerTo(x, y)
         val moves = pointerMoves
@@ -326,8 +298,6 @@ class WowTouchView(
         private const val KEY_MS = 60L
         /** How long the game takes to show its cursor for where the pointer went. */
         private const val CURSOR_SETTLE_MS = 90L
-        /** A second tap on the same spot within this talks to what the first one selected (without a cursor to read). */
-        private const val AGAIN_MS = 1500L
         private const val AGAIN_SLOP_DP = 40f
         /** When the login screen's cursor is looked at, after the game appears. */
         private val ARROW_SAMPLES_MS = longArrayOf(4000L, 8000L, 12000L)

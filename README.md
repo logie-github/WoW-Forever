@@ -65,23 +65,38 @@ Without a keystore, builds are signed with a debug key, which changes per CI run
 
 The setup screen uses the modern home layout of [logie-github/Blizzard](https://github.com/logie-github/Blizzard) (`ui/ModernHome.kt`): the World of Warcraft art fills the screen, drifting, with snow in the art's own colours; a panel down the left holds the readiness list and any notices (install, game update, app update, errors); the game's name in Cinzel, its tags, **Play** and **•••** sit at the bottom right, with the box art beside them on tall screens. The gear and ••• open one sheet: region, resolution, touch controls, the Battle.net login and the game folder. Fonts: Cinzel and Jost (SIL OFL, `fonts/`).
 
+## Input rule: one press, one function
+
+Hard rule, following Blizzard's terms of use to the letter: every press sends exactly one game function. Nothing is chained, repeated or sent on the player's behalf.
+
+| Where | Enforced by |
+| :--- | :--- |
+| On-screen buttons, radial menu, controller bindings | `BindingCombo`: no sequences; a combo is its modifiers (Ctrl/Shift/Alt) plus at most one key or button. Saved sequences and multi-key combos load cut down to that. The sequence option is gone from the binding dialogs. |
+| Touchpad gestures | `TouchGestureConfig`: the same rule for gesture actions. The touchpad's double tap sends one click (the second tap's own), not two. |
+| On-screen sticks, d-pads, trackpads bound to keys | `ControlElement.oneDirection`: one movement key at a time (the strongest direction), no diagonals; a d-pad key goes down once, not again on every move. |
+| Physical controller sticks bound to keys | One key at a time, pressed once per push; a held button bound to the mouse wheel scrolls one step, no repeat. Gamepad (XInput) passthrough is unchanged: the game reads the stick itself. |
+| Shooter mode | Pushing the stick to its rim never adds a sprint key. |
+| WoW touch controls | A tap is one left click; the second tap of a double tap is one right click, one action-bar press or one jump; the stick holds one key at a time. |
+
+Tests: `app/src/test/java/app/gamenative/rules/OnePressOneFunctionTest.kt`, run in CI.
+
 ## Touch controls
 
 In game, the Blizzard launcher's World of Warcraft gestures (`app/src/main/java/app/gamenative/wowinput/`, from Blizzard's `wowinput/`) replace Winlator's touchpad. Switch back to the touchpad in ••• → Touch controls.
 
 | Gesture | Where | Does |
 | :--- | :--- | :--- |
-| Swipe and hold | Left half | Walk, like a stick: W/S forward and back, Q/E sideways, diagonals between |
+| Swipe and hold | Left half | Walk, like a stick: one key at a time, W/S forward and back, Q/E sideways (no diagonals) |
 | Drag | Right half | Turn the camera and the character (right button held) |
-| Tap | Anywhere | Click; talks, loots, gathers where the game's cursor offers it (a right click follows) |
-| Double tap | Enemy / action bars / elsewhere | Attack / press again / jump |
+| Tap | Anywhere | One left click (selects) |
+| Double tap | On what the first tap found / action bars / elsewhere | The second tap is one right click (attack, talk, loot, gather) / one more press / one jump |
 | Hold, lift | Anywhere | Right click |
 | Hold, move | Anywhere | Drag with the left button (items, frames) |
 | Two fingers | Pinch / tap / swipe up | Zoom / target nearest enemy (Tab) / chat with the keyboard |
 | Three-finger tap | | Keyboard |
 | Four-finger tap | | The in-game menu |
 
-On-screen controls, when shown, still take touches first; a mouse or trackpad goes to the game as before. The Blizzard version's private-realm signals (what a tap selected, spellbook areas, cutscenes) and its 3.3.5a character-creation detection don't exist on Blizzard's live servers, so taps rely on the game's cursor alone.
+On-screen controls, when shown, still take touches first; a mouse or trackpad goes to the game as before. The Blizzard version's private-realm signals (what a tap selected, spellbook areas, cutscenes) and its 3.3.5a character-creation detection don't exist on Blizzard's live servers, so the second tap reads the game's cursor from the first to decide between a right click and a jump.
 
 ## Using the app
 

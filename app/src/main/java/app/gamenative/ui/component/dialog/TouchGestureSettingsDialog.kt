@@ -862,7 +862,8 @@ private fun TouchActionComboPicker(
         var selectedSequenceDelayMs by remember(currentAction) {
             mutableIntStateOf(TouchGestureConfig.actionSequenceDelayMs(currentAction))
         }
-        val canChooseMode = allowSequence && selectedActions.size > 1
+        // One press, one function (Blizzard's terms of use): no sequence mode to choose.
+        val canChooseMode = false && allowSequence && selectedActions.size > 1
 
         AlertDialog(
             onDismissRequest = { showDialog = false },
