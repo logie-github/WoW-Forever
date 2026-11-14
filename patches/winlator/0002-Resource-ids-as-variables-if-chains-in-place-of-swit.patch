@@ -4,7 +4,7 @@ Date: Mon, 12 Oct 2026 02:06:07 +0000
 Subject: [PATCH] Resource ids as variables: if chains in place of switch
  statements on them
 
-Built into the WoW Forever app's module, Winlator's resource ids aren't constants, so they
+Built into the Blizzard app's module, Winlator's resource ids aren't constants, so they
 can't be switch cases.
 ---
  .../com/winlator/ContainerDetailFragment.java |  49 ++++----

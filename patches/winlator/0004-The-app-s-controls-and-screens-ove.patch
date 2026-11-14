@@ -1,7 +1,7 @@
 From 6650cf3f02bc00b08ecad0589de6aed236ce956b Mon Sep 17 00:00:00 2001
 From: Blizzard <blizz@users.noreply.github.com>
 Date: Mon, 12 Oct 2026 02:24:10 +0000
-Subject: [PATCH] The WoW Forever app's controls and screens over the
+Subject: [PATCH] The Blizzard app's controls and screens over the
  game
 
 With the extra "gestures", the game screen puts the app's GestureView over Winlator's touchpad
@@ -19,8 +19,8 @@ index 2e2526d..4167992 100644
      private XServerView xServerView;
      private InputControlsView inputControlsView;
      private TouchpadView touchpadView;
-+    // WoW Forever app: its touch gestures over the game (extra "gestures").
-+    private com.logie.wowforever.GestureView gestureView;
++    // Blizzard app: its touch gestures over the game (extra "gestures").
++    private com.logie.blizz.game.GestureView gestureView;
      private XEnvironment environment;
      private DrawerLayout drawerLayout;
      private Container container;
@@ -29,8 +29,8 @@ index 2e2526d..4167992 100644
          ForegroundService.startSession(this);
  
 -        final PreloaderDialog preloaderDialog = new PreloaderDialog(this);
-+        // WoW Forever app: its own loading screen.
-+        final com.logie.wowforever.GameLoading preloaderDialog = new com.logie.wowforever.GameLoading(this);
++        // Blizzard app: its own loading screen.
++        final com.logie.blizz.game.GameLoading preloaderDialog = new com.logie.blizz.game.GameLoading(this);
          preferences = PreferenceManager.getDefaultSharedPreferences(this);
          boolean useAndroidClipboardOnWine = preferences.getBoolean("use_android_clipboard_on_wine", false);
          clipboardManager = useAndroidClipboardOnWine ? (ClipboardManager)getSystemService(CLIPBOARD_SERVICE) : null;
@@ -39,7 +39,7 @@ index 2e2526d..4167992 100644
              boolean wineprefixNeedsUpdate = container.getExtra("wineprefixNeedsUpdate").equals("t");
              if (wineprefixNeedsUpdate) {
 -                preloaderDialog.show(R.string.updating_system_files);
-+                preloaderDialog.show(R.string.wf_loading_update);
++                preloaderDialog.show(R.string.blizz_game_loading_update);
                  WineUtils.updateWineprefix(this, (status) -> {
                      if (status == 0) {
                          container.putExtra("wineprefixNeedsUpdate", null);
@@ -48,7 +48,7 @@ index 2e2526d..4167992 100644
          }
  
 -        preloaderDialog.show(R.string.starting_up);
-+        preloaderDialog.show(R.string.wf_loading);
++        preloaderDialog.show(R.string.blizz_game_loading);
  
          inputControlsManager = new InputControlsManager(this);
          xServer = new XServer(this, screenInfo);
@@ -77,7 +77,7 @@ index 2e2526d..4167992 100644
          rootView.addView(touchpadView);
  
 +        if (getIntent().getBooleanExtra("gestures", false)) {
-+            gestureView = new com.logie.wowforever.GestureView(this, xServer, this::exit);
++            gestureView = new com.logie.blizz.game.GestureView(this, xServer, this::exit);
 +            rootView.addView(gestureView);
 +        }
 +

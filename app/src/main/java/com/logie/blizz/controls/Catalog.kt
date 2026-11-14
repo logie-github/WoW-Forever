@@ -1,0 +1,270 @@
+package com.logie.blizz.controls
+
+/**
+ * Each game's functions (with the game's own default keys), its screen areas and its default
+ * gesture rules. The functions every game shares come from [common]; a game names them its way
+ * (Diablo's left click walks, attacks and picks up; StarCraft's selects). Plain Kotlin, unit-tested.
+ */
+object Catalog {
+    data class Game(val functions: List<GameFunction>, val areas: List<Area>, val rules: List<Rule>) {
+        fun function(id: String) = functions.firstOrNull { it.id == id }
+        fun area(id: String): Area? = areas.firstOrNull { it.id == id } ?: Area.parseCustom(id)
+    }
+
+    fun of(gameId: String): Game = when (gameId) {
+        "diablo", "installer" -> DIABLO
+        "diablo2" -> DIABLO2
+        "starcraft", "starcraft_remastered" -> STARCRAFT
+        "starcraft2" -> STARCRAFT2
+        "warcraft" -> WARCRAFT
+        "warcraft2" -> WARCRAFT2
+        "warcraft3_roc", "warcraft3_tft" -> WARCRAFT3
+        "wow", "wow-client" -> WOW
+        else -> STARCRAFT
+    }
+
+    private fun f(id: String, label: String, kind: Kind, key: String? = null) = GameFunction(id, label, kind, key?.let { KeyCombo.of(it) })
+    private fun key(id: String, label: String, key: String) = f(id, label, Kind.KEY, key)
+
+    /** What every game has; [labels] renames them for a game. */
+    private fun common(labels: Map<String, String> = emptyMap()): List<GameFunction> = listOf(
+        f("click", labels["click"] ?: "Left click", Kind.CLICK_LEFT),
+        f("rclick", labels["rclick"] ?: "Right click", Kind.CLICK_RIGHT),
+        f("dclick", labels["dclick"] ?: "Double click", Kind.DOUBLE_LEFT),
+        f("shiftclick", labels["shiftclick"] ?: "Shift + left click", Kind.SHIFT_LEFT),
+        f("shiftrclick", labels["shiftrclick"] ?: "Shift + right click", Kind.SHIFT_RIGHT),
+        f("ctrlclick", labels["ctrlclick"] ?: "Ctrl + left click", Kind.CTRL_LEFT),
+        f("drag", labels["drag"] ?: "Drag", Kind.DRAG_LEFT),
+        f("pan", labels["pan"] ?: "Scroll", Kind.PAN),
+        key("up", labels["up"] ?: "Up", "Up"),
+        key("down", labels["down"] ?: "Down", "Down"),
+        key("left", labels["left"] ?: "Left", "Left"),
+        key("right", labels["right"] ?: "Right", "Right"),
+        f("wheelup", labels["wheelup"] ?: "Wheel up", Kind.WHEEL_UP),
+        f("wheeldown", labels["wheeldown"] ?: "Wheel down", Kind.WHEEL_DOWN),
+        key("esc", "Escape", "Esc"),
+        key("enter", labels["enter"] ?: "Enter", "Enter"),
+        f("keyboard", "Phone keyboard", Kind.PHONE_KEYBOARD),
+        f("menu", "App menu", Kind.APP_MENU),
+        f("none", "Nothing", Kind.NONE),
+    )
+
+    private fun rule(trigger: Trigger, function: String, area: String = Area.ANYWHERE.id) = Rule(trigger, area, function)
+
+    private val SHARED_RULES = listOf(
+        rule(Trigger.THREE_FINGER_TAP, "keyboard"),
+        rule(Trigger.FOUR_FINGER_TAP, "menu"),
+    )
+
+    /** Diablo's and Diablo II's: tap left-clicks, hold right-clicks, drag walks, flicks are the arrow keys. */
+    private fun arpgRules(menu: String) = listOf(
+        rule(Trigger.TAP, "click"),
+        rule(Trigger.HOLD, "rclick"),
+        rule(Trigger.DRAG, "drag"),
+        rule(Trigger.FLICK_UP, "up"), rule(Trigger.FLICK_DOWN, "down"),
+        rule(Trigger.FLICK_LEFT, "left"), rule(Trigger.FLICK_RIGHT, "right"),
+        rule(Trigger.REST_TAP, "shiftclick"),
+        rule(Trigger.TWO_FINGER_TAP, menu),
+    ) + SHARED_RULES
+
+    /**
+     * The strategy games', the scheme of the Warcraft app (the user's: "attach the old touch"): tap right-clicks (move, attack,
+     * gather; on the game's [panels] and bars, where a right click does nothing, a tap left-clicks), hold left-clicks on lift
+     * (select a unit, press a menu button), hold twice double-clicks, a resting finger is Shift, drag scrolls, pinch is the
+     * wheel, two fingers the game's menu.
+     */
+    private fun rtsRules(menu: String, panels: List<String>) = listOf(
+        rule(Trigger.TAP, "rclick"),
+        rule(Trigger.HOLD, "click"),
+        rule(Trigger.DOUBLE_TAP_HOLD, "dclick"),
+        rule(Trigger.DRAG, "pan"),
+        rule(Trigger.REST_TAP, "shiftrclick"),
+        rule(Trigger.REST_HOLD, "shiftclick"),
+        rule(Trigger.PINCH_OUT, "wheelup"), rule(Trigger.PINCH_IN, "wheeldown"),
+        rule(Trigger.TWO_FINGER_TAP, menu),
+    ) + panels.map { rule(Trigger.TAP, "click", it) } + SHARED_RULES
+
+    private fun groups(): List<GameFunction> =
+        (1..10).map { n -> val k = (n % 10).toString(); key("group$k", "Select group $k", k) } +
+            (1..10).map { n -> val k = (n % 10).toString(); key("setgroup$k", "Set group $k", "Ctrl+$k") }
+
+    // Diablo (DevilutionX's own defaults) -------------------------------------------------------
+
+    val DIABLO = Game(
+        functions = common(mapOf("click" to "Walk · attack · pick up", "rclick" to "Cast spell", "shiftclick" to "Attack in place", "drag" to "Walk",
+            "wheelup" to "Previous quick spell", "wheeldown" to "Next quick spell")) + listOf(
+            key("inventory", "Inventory", "I"), key("character", "Character", "C"), key("quests", "Quest log", "Q"),
+            key("spellbook", "Spellbook", "B"), key("speedbook", "Speedbook", "S"), key("party", "Party", "Y"),
+            key("automap", "Automap", "Tab"), key("maptype", "Map type", "M"), key("hide", "Hide info screens", "Space"),
+            f("highlight", "Item highlighting", Kind.KEY_HOLD, "Alt"), key("togglehighlight", "Toggle item highlighting", "Ctrl"),
+            key("zoom", "Zoom", "Z"), key("pause", "Pause", "P"), key("save", "Quick save", "F2"), key("load", "Quick load", "F3"),
+            key("help", "Help", "F1"), key("info", "Game info", "V"), key("chatlog", "Chat log", "L"), key("sort", "Sort inventory", "R"),
+            key("darker", "Darker", "F"), key("brighter", "Brighter", "G"), key("screenshot", "Screenshot", "PrtSc"),
+        ) + (1..8).map { key("belt$it", "Belt $it", "$it") } + (1..4).map { key("quickspell$it", "Quick spell $it", "F${4 + it}") } +
+            (1..4).map { key("message$it", "Quick message $it", "F${8 + it}") },
+        areas = Area.STANDARD + listOf(Area("panel", "Control panel", 0f, 0.733f, 1f, 1f)),
+        rules = arpgRules("esc"),
+    )
+
+    // Diablo II ---------------------------------------------------------------------------------
+
+    val DIABLO2 = Game(
+        functions = common(mapOf("click" to "Move · attack · pick up", "rclick" to "Right skill", "shiftclick" to "Stand still", "drag" to "Walk")) + listOf(
+            key("character", "Character", "C"), key("inventory", "Inventory", "I"), key("party", "Party", "P"),
+            key("messages", "Message log", "M"), key("quests", "Quest log", "Q"), key("skilltree", "Skill tree", "T"),
+            key("skillbar", "Skill speed bar", "S"), key("hireling", "Hireling", "O"), key("help", "Help", "H"),
+            key("automap", "Automap", "Tab"), key("swap", "Swap weapons", "W"), key("run", "Run / walk", "R"),
+            f("showitems", "Show items", Kind.KEY_HOLD, "Alt"), key("clear", "Clear screen", "Space"),
+            key("screenshot", "Screenshot", "PrtSc"),
+        ) + (1..4).map { key("belt$it", "Belt $it", "$it") } + (1..8).map { key("skill$it", "Skill $it", "F$it") },
+        areas = Area.STANDARD + listOf(Area("panel", "Control panel", 0f, 0.86f, 1f, 1f)),
+        rules = arpgRules("esc"),
+    )
+
+    // StarCraft ----------------------------------------------------------------------------------
+
+    private val RTS_LABELS = mapOf(
+        "click" to "Select · press", "rclick" to "Move · attack · gather", "dclick" to "Select all of type",
+        "shiftclick" to "Add to selection", "shiftrclick" to "Queue order", "drag" to "Box select", "pan" to "Scroll map", "enter" to "Chat",
+    )
+
+    private val RTS_COMMANDS = listOf(
+        key("attack", "Attack", "A"), key("move", "Move", "M"), key("stop", "Stop", "S"), key("hold", "Hold position", "H"),
+        key("patrol", "Patrol", "P"), key("build", "Build", "B"), key("advanced", "Advanced build", "V"),
+        key("gamemenu", "Game menu", "F10"), key("alert", "Last alert", "Space"),
+    )
+
+    private val SC_AREAS = Area.STANDARD + listOf(
+        Area("console", "Console", 0f, 0.73f, 1f, 1f), Area("minimap", "Minimap", 0f, 0.73f, 0.2f, 1f),
+        Area("commands", "Command card", 0.77f, 0.73f, 1f, 1f), Area("menubar", "Menu bar", 0f, 0f, 1f, 0.04f),
+    )
+
+    val STARCRAFT = Game(
+        functions = common(RTS_LABELS) + RTS_COMMANDS + listOf(
+            key("camera1", "Camera 1", "F2"), key("camera2", "Camera 2", "F3"), key("camera3", "Camera 3", "F4"),
+            key("setcamera1", "Save camera 1", "Shift+F2"), key("setcamera2", "Save camera 2", "Shift+F3"), key("setcamera3", "Save camera 3", "Shift+F4"),
+        ) + groups(),
+        areas = SC_AREAS,
+        rules = rtsRules("gamemenu", listOf("console", "menubar")),
+    )
+
+    // StarCraft II -------------------------------------------------------------------------------
+
+    val STARCRAFT2 = Game(
+        functions = common(RTS_LABELS) + RTS_COMMANDS + listOf(
+            key("idle", "Idle worker", "F1"), key("army", "Select army", "F2"), key("bases", "Cycle bases", "Backspace"),
+            key("subgroup", "Next subgroup", "Tab"),
+        ) + (1..4).map { key("camera$it", "Camera $it", "F${4 + it}") } + (1..4).map { key("setcamera$it", "Save camera $it", "Ctrl+F${4 + it}") } + groups(),
+        areas = Area.STANDARD + listOf(
+            Area("console", "Console", 0f, 0.78f, 1f, 1f), Area("minimap", "Minimap", 0f, 0.75f, 0.2f, 1f),
+            Area("commands", "Command card", 0.75f, 0.75f, 1f, 1f), Area("menubar", "Menu bar", 0f, 0f, 1f, 0.04f),
+        ),
+        rules = rtsRules("gamemenu", listOf("console", "menubar")),
+    )
+
+    // Warcraft -----------------------------------------------------------------------------------
+
+    /**
+     * Warcraft III's own layout (the user, 10 November 2026: "Tap to select then tap to move. Double tap for left click. Hold
+     * tap for right click. Anything else is up to you."):
+     *
+     * - a **tap** is the smart click: the left button while there is nothing to command (it selects a unit, presses a menu's
+     *   button, confirms a target or a place to build), the right button once units or a building of the player's are selected
+     *   (move, attack, gather, set the rally point). The game screen reads which from the game's own picture
+     *   ([com.logie.blizz.game.Wc3Screen]); where it cannot tell, a tap is the left click;
+     * - a **double tap** is always the left click (select another unit while some are selected), a **hold** always the right;
+     * - on the game's own buttons (the console, the top bar, the hero and idle-worker icons) a tap is the left click and a
+     *   double tap two of them;
+     * - **tap, then tap and hold** is the game's double click (every unit of that kind on the screen);
+     * - **hold, then drag** draws the selection box; a plain drag scrolls the map, and on the minimap it is the game's own drag
+     *   (the view follows the finger); a resting finger is Shift (queue an order with a tap, add to the selection with a hold);
+     *   pinch is the wheel (zoom);
+     * - **two fingers** are the game's menu in play, and Escape wherever there is something to leave (a scene to skip, a menu
+     *   page, the game's menu or log, a command waiting for its target): [Kind.KEY_OR_ESCAPE].
+     */
+    private val WARCRAFT3_RULES = listOf(
+        rule(Trigger.TAP, "smart"),
+        rule(Trigger.DOUBLE_TAP, "click"),
+        rule(Trigger.HOLD, "rclick"),
+        rule(Trigger.DOUBLE_TAP_HOLD, "dclick"),
+        rule(Trigger.HOLD_DRAG, "drag"),
+        rule(Trigger.DRAG, "pan"),
+        rule(Trigger.DRAG, "drag", "minimap"),
+        rule(Trigger.REST_TAP, "shiftrclick"),
+        rule(Trigger.REST_HOLD, "shiftclick"),
+        rule(Trigger.PINCH_OUT, "wheelup"), rule(Trigger.PINCH_IN, "wheeldown"),
+        rule(Trigger.TWO_FINGER_TAP, "menuback"),
+    ) + listOf("console", "menubar", "heroes", "idle").flatMap { listOf(rule(Trigger.TAP, "click", it), rule(Trigger.DOUBLE_TAP, "none", it)) } + SHARED_RULES
+
+    val WARCRAFT3 = Game(
+        functions = common(RTS_LABELS) + listOf(
+            f("smart", "Select, then order (the smart tap)", Kind.SMART_CLICK),
+            f("menuback", "Game menu · Escape in a scene, a menu or a box", Kind.KEY_OR_ESCAPE, "F10"),
+        ) +
+            RTS_COMMANDS.filter { it.id != "build" && it.id != "advanced" } + listOf(
+            key("hero1", "Hero 1", "F1"), key("hero2", "Hero 2", "F2"), key("hero3", "Hero 3", "F3"), key("subgroup", "Next subgroup", "Tab"),
+            f("healthbars", "Health bars", Kind.KEY_HOLD, "Alt"),
+        ) + groups(),
+        areas = Area.STANDARD + listOf(
+            Area("console", "Console", 0f, 0.76f, 1f, 1f), Area("minimap", "Minimap", 0f, 0.76f, 0.2f, 1f),
+            Area("commands", "Command card", 0.75f, 0.76f, 1f, 1f), Area("menubar", "Menu bar", 0f, 0f, 1f, 0.05f),
+            // The heroes' icons down the left edge (three of them) and the idle worker's icon above the minimap.
+            Area("heroes", "Hero icons", 0f, 0.05f, 0.06f, 0.33f), Area("idle", "Idle worker icon", 0f, 0.65f, 0.06f, 0.73f),
+        ),
+        rules = WARCRAFT3_RULES,
+    )
+
+    val WARCRAFT2 = Game(
+        functions = common(RTS_LABELS) + RTS_COMMANDS.filter { it.id != "alert" } + groups(),
+        areas = Area.STANDARD + listOf(Area("panel", "Side panel", 0f, 0f, 0.22f, 1f), Area("minimap", "Minimap", 0f, 0f, 0.22f, 0.3f)),
+        rules = rtsRules("gamemenu", listOf("panel")),
+    )
+
+    val WARCRAFT = Game(
+        functions = common(RTS_LABELS) + RTS_COMMANDS.filter { it.id != "alert" && it.id != "advanced" } + groups(),
+        areas = Area.STANDARD + listOf(Area("panel", "Side panel", 0f, 0f, 0.22f, 1f), Area("minimap", "Minimap", 0f, 0f, 0.22f, 0.3f)),
+        rules = rtsRules("gamemenu", listOf("panel")),
+    )
+
+    // World of Warcraft (3.3.5a, mouse and keyboard on a touch screen) --------------------------------
+
+    /**
+     * Ported from the World of Warcraft app's touch controls: tap clicks (talks, loots, targets), hold
+     * right-clicks, a drag walks and turns (the arrow keys: up forward, left and right turn), flicks
+     * jump, target and step sideways, a rest finger with a hold keeps walking forward, two fingers tap
+     * to target the nearest enemy and pinch to zoom, three fingers open the keyboard, four the menu.
+     */
+    val WOW = Game(
+        functions = common(mapOf(
+            "click" to "Click · target · talk", "rclick" to "Right click · interact", "drag" to "Move the mouse (left button down)",
+            "pan" to "Walk · turn (arrow keys)", "wheelup" to "Zoom in", "wheeldown" to "Zoom out", "enter" to "Chat",
+        )) + listOf(
+            key("forward", "Walk forward", "W"), key("backward", "Walk backward", "S"),
+            key("turnleft", "Turn left", "A"), key("turnright", "Turn right", "D"),
+            key("strafeleft", "Step left", "Q"), key("straferight", "Step right", "E"),
+            f("walkforward", "Walk forward (held)", Kind.KEY_HOLD, "W"),
+            key("jump", "Jump", "Space"), key("target", "Target nearest enemy", "Tab"),
+            key("sit", "Sit · stand", "X"), key("sheathe", "Sheathe weapon", "Z"),
+            key("bags", "Bags", "B"), key("character", "Character", "C"), key("spellbook", "Spellbook", "P"),
+            key("talents", "Talents", "N"), key("quests", "Quest log", "L"), key("map", "World map", "M"),
+            key("social", "Social", "O"), key("achievements", "Achievements", "Y"), key("finder", "Dungeon finder", "I"),
+            key("guild", "Guild", "J"), key("reply", "Reply to whisper", "R"), key("screenshot", "Screenshot", "PrtSc"),
+        ) + (1..9).map { key("bar$it", "Action $it", "$it") } + listOf(key("bar0", "Action 10", "0"), key("bar11", "Action 11", "-"), key("bar12", "Action 12", "=")),
+        areas = Area.STANDARD + listOf(
+            Area("actionbars", "Action bars", 0.2f, 0.82f, 0.8f, 1f), Area("minimap", "Minimap", 0.82f, 0f, 1f, 0.28f),
+        ),
+        rules = listOf(
+            rule(Trigger.TAP, "click"),
+            rule(Trigger.HOLD, "rclick"),
+            rule(Trigger.DOUBLE_TAP, "jump"),
+            rule(Trigger.DRAG, "pan"),
+            rule(Trigger.FLICK_UP, "jump"), rule(Trigger.FLICK_DOWN, "target"),
+            rule(Trigger.FLICK_LEFT, "strafeleft"), rule(Trigger.FLICK_RIGHT, "straferight"),
+            rule(Trigger.REST_TAP, "shiftclick"), rule(Trigger.REST_HOLD, "walkforward"),
+            rule(Trigger.TWO_FINGER_TAP, "target"),
+            rule(Trigger.TWO_THEN_ONE_TAP, "enter"),
+            rule(Trigger.PINCH_OUT, "wheelup"), rule(Trigger.PINCH_IN, "wheeldown"),
+            rule(Trigger.THREE_FINGER_TAP, "keyboard"), rule(Trigger.FOUR_FINGER_TAP, "menu"),
+        ),
+    )
+}

@@ -1,11 +1,17 @@
-build/
 .gradle/
-.kotlin/
+**/build/
 local.properties
 *.iml
 .idea/
-.cxx/
-app/.cxx/
-# Winlator, brought in by scripts/prepare-winlator.sh
 app/winlator/
-*.apk
+app/tools/
+build/
+app/.cxx/
+app/stratagus/
+
+app/warsmash/
+.kotlin/
+__pycache__/
+app/ffmpeg/
+# The engine modules' native build trees (CMake), made by every build.
+warsmash/*/.cxx/

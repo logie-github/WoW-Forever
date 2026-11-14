@@ -1,28 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <!-- Winlator draws with OpenGL ES and Vulkan. -->
+    <!-- The games (Winlator) draw with OpenGL ES and Vulkan. -->
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
 
-    <!-- Blizzard's installer (downloaded from Blizzard), and Battle.net and the game themselves. -->
+    <!-- Downloads (Blizzard's legacy servers, DevilutionX's releases); nothing reaches Battle.net. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <!-- Winlator: the game keeps running with the screen of another app in front, sound, rumble. -->
+    <!-- "Search the phone" in a game's import: the importers look for the game's files on the phone's own storage (asked for
+         when the person taps it; the second is Android 11's switch for the same, where the first is not enough). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- Updates from this repository's releases, handed to Android's installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Imports of gigabytes keep running with the app in the background. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The games (Winlator): sound, rumble and network status. -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- The installed apps a game can be played with (the Warcraft games). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
     <application
         android:label="@string/app_name"
-        android:icon="@mipmap/ic_wowforever"
-        android:roundIcon="@mipmap/ic_wowforever_round"
-        android:theme="@style/WfTheme"
+        android:icon="@mipmap/ic_blizz"
+        android:theme="@style/AppTheme"
         android:allowBackup="false"
         android:supportsRtl="true"
-        android:largeHeap="true"
         android:appCategory="game"
         android:isGame="true">
         <activity
@@ -37,8 +49,40 @@
             </intent-filter>
         </activity>
 
-        <!-- Winlator: its game screen (its X server, with Wine and Box64 behind it), the screens its code refers to,
-             and the service that keeps the game alive in the background. -->
+        <service
+            android:name=".importer.ImportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- The Wrath realm (ChromieCraft, Wrath Remix) imported from the WoW app, kept alive while it
+             runs; no foreground service type, as the WoW app's ServerService. -->
+        <service
+            android:name=".wow.WowRealmService"
+            android:exported="false" />
+
+        <!-- Warcraft I and II, native: Stratagus on SDL's screen, in a process of its own that ends
+             with the game (the engine keeps its state in the process). -->
+        <activity
+            android:name=".game.StratagusActivity"
+            android:exported="false"
+            android:process=":stratagus"
+            android:theme="@style/StratagusTheme"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation|uiMode"
+            android:resizeableActivity="true" />
+
+        <activity
+            android:name=".warsmash.WarsmashActivity"
+            android:exported="false"
+            android:process=":warsmash"
+            android:theme="@style/StratagusTheme"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|density|navigation|uiMode" />
+
+        <!-- The games: Winlator's screen (its X server with Wine and Box64 behind it), its controls
+             editor, and the service that keeps the game alive in the background. Its own main
+             screen stays, unlisted, for the code that refers to it. -->
         <activity
             android:name="com.winlator.XServerDisplayActivity"
             android:exported="false"

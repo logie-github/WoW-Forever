@@ -1,0 +1,35 @@
+# Wrath++ milestones and gates
+
+## Decision gates
+
+| Gate | Question | State (2026-11-10) |
+|---|---|---|
+| A | Does the pinned source client build, boot and show the glue screens? | build: **passed** on MSVC 2022 x64 with two core patches (TEST_RESULTS.md); boot: **untested** (needs the user's 3.3.5a data on Windows/Wine) |
+| B | Does it run the Alternative HD data and connect to a disposable Wrath++ server without harming either? | **untested** (server side ready: isolated realm, live-tested server) |
+| C | Does an independent sixth property visibly change a model in preview and in the world? | **blocked**: needs the `Component.GeosRenderPrep` seam (CLIENT_PROBE.md); protocol/state side done |
+| D | Does the server persist and broadcast it across a restart? | **passed, server side**: live test with a protocol client (TEST_RESULTS.md); not yet with the real client |
+| E | Does the client run in the app's Android runtime? | **untested** |
+
+## Phases
+
+| Phase | Content | State |
+|---|---|---|
+| 0 Inventory | repo audit, pins, hazards, licensing; the looks to carry | done (SOURCE_AUDIT.md); Shadowlands 9.2.7 options for the ten races done (SHADOWLANDS_OPTIONS.md: 277 options, 3529 choices), which replaces the Legion 7.3.5 inventory (LEGION_OPTIONS_735.md) |
+| 1 Client engine proof | build, boot, HD data, connect | build passes in CI; boot/HD/connect not done |
+| 2 Isolated infrastructure | realm 5 / 8087 / `*_wrathpp`, own paths, guards, rollback | `ctl.sh` done and tested; app page **Wrath++ (experimental)** with its Play flow (server package download, private game copy, realm start) done and unit-tested; arm64 server package built by `build-wrathpp-server.yml`; **not run on a phone** |
+| 3 Vertical slice | registry → client state → preview → payload → DB → world → observer → relog/restart | registry, payload, DB, world, observer, restart: done on the server and in the Lua mod; **preview and in-world drawing: not done** (Gate C) |
+| 4 Generalized compositor | texture layers, attachments, constraints | protocol carries the kinds; nothing drawn |
+| 5 Creator UI | Shadowlands' creator on the 3.3.5 screen, on the looks' own data | done for what the five numbers carry (6 to 9 options a race and sex, each its own row); the options nothing draws yet are listed greyed; tested on a stand-in and the real data, **not seen in the game** (SHADOWLANDS_OPTIONS.md, "The creator") |
+| 6 Races | one race/sex at a time from the verified inventory | not started |
+| 7 Android release | experimental installer, rollback | not started |
+
+## Next highest-value slice
+
+1. (Done: the probe builds the client.)
+2. Write the `Component.GeosRenderPrep` seam as patches to core, SDK and client
+   (`realm/warcraft/wrathpp/patches/{core,client}`), built by the probe; extend the Lua mod to apply
+   `GeosetsFor` through it.
+3. On a Windows or Wine machine with the user's 3.3.5a data: boot (Gate A), connect to the Wrath++
+   server, and show that changing horns alone changes the preview, the character list, the world
+   and a second client's view, and survives a restart (acceptance of the first real feature).
+4. Inventory one race/sex from the user's 7.3.5 client and replace the seed registry rows.

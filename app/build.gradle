@@ -3,41 +3,55 @@ plugins {
 	id 'org.jetbrains.kotlin.plugin.compose'
 }
 
-// CI passes the version (-PwfVersionCode, -PwfVersionName); local builds use these.
+// CI passes the version (-PblizzVersionCode, -PblizzVersionName); local builds use these.
 def prop = { String name, String fallback ->
 	def value = project.hasProperty(name) ? project.property(name).toString() : ""
 	value.isEmpty() ? fallback : value
 }
 
-// The game's runtime, Winlator (scripts/prepare-winlator.sh puts it in app/winlator).
+// The games' runtime, Winlator (scripts/prepare-winlator.sh puts it in app/winlator), and the
+// importers' programs (scripts/build-tools.sh puts them in app/tools).
 def winlator = file("winlator")
 if (!new File(winlator, "java").isDirectory()) {
 	throw new GradleException("Winlator isn't in app/winlator: run scripts/prepare-winlator.sh")
 }
+if (!file("tools/jniLibs/arm64-v8a/libbldl.so").isFile() || !file("tools/assets/borderless.exe").isFile()) {
+	throw new GradleException("The importers' programs (and borderless.exe) aren't in app/tools: run scripts/build-tools.sh")
+}
+// Warcraft I and II, native: the Stratagus engine, its data tools, SDL's Java activity and the games'
+// scripts (scripts/build-stratagus.sh puts them in app/stratagus; --placeholders for a quick local
+// configuration without the NDK).
+if (!file("stratagus/jniLibs/arm64-v8a/libmain.so").isFile()) {
+	throw new GradleException("Stratagus isn't in app/stratagus: run scripts/build-stratagus.sh")
+}
 
 android {
-	namespace = 'com.logie.wowforever'
+	namespace = 'com.logie.blizz'
 	compileSdk = 35
 
 	buildFeatures {
 		compose = true
+		// The version, for the bug reports.
 		buildConfig = true
 	}
 
 	defaultConfig {
-		applicationId = 'com.logie.wowforever'
+		applicationId = 'com.logie.blizz'
 		minSdk = 26
-		// 28, like Termux and Winlator: Android lets apps that target 28 or lower run programs from their own
-		// storage, which is where Wine runs from.
+		// 28, like Termux and Winlator: Android lets apps that target 28 or lower run programs from
+		// their own storage, which is where the games' Wine runs from.
 		//noinspection ExpiredTargetSdkVersion
 		targetSdk = 28
-		versionCode = prop('wfVersionCode', '1').toInteger()
-		versionName = prop('wfVersionName', '2.0')
-		buildConfigField "String", "UPDATE_REPO", "\"${prop('wfUpdateRepo', 'logie-github/WoW-Forever')}\""
-		buildConfigField "String", "RELEASE_TAG_PREFIX", "\"wowforever-build\""
+		versionCode = prop('blizzVersionCode', '1').toInteger()
+		versionName = prop('blizzVersionName', '1.0')
+		// Updates from this repository's releases (blizzard-build-N), and the token the bug reports
+		// open issues with: CI's BLIZZ_REPORT_TOKEN secret, as YeaBwoi's apps carry theirs.
+		buildConfigField "String", "UPDATE_REPO", "\"${prop('blizzUpdateRepo', 'logie-github/Blizzard')}\""
+		buildConfigField "String", "RELEASE_TAG_PREFIX", "\"blizzard-build\""
+		buildConfigField "String", "REPORT_TOKEN", "\"${prop('blizzReportToken', '')}\""
 
 		ndk {
-			// Phones only: the runtime is built for arm64.
+			// Phones only: the games' runtime is built for arm64.
 			abiFilters "arm64-v8a"
 		}
 	}
@@ -53,7 +67,7 @@ android {
 
 	packaging {
 		jniLibs {
-			// Winlator loads its libraries from files.
+			// Winlator loads its libraries from files, and the importers' programs run from there.
 			useLegacyPackaging = true
 		}
 	}
@@ -62,9 +76,9 @@ android {
 	signingConfigs {
 		sideload {
 			storeFile = file('sideload.keystore')
-			storePassword = 'wowforever'
-			keyAlias = 'wowforever'
-			keyPassword = 'wowforever'
+			storePassword = 'blizzard'
+			keyAlias = 'blizz'
+			keyPassword = 'blizzard'
 		}
 	}
 	buildTypes {
@@ -72,6 +86,7 @@ android {
 		release {
 			signingConfig = signingConfigs.sideload
 			minifyEnabled = true
+			// Winlator looks some of its resources up by name.
 			shrinkResources = false
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 		}
@@ -84,10 +99,10 @@ android {
 
 	sourceSets {
 		main {
-			assets.srcDirs += ['winlator/assets']
-			java.srcDirs += ['winlator/java']
+			assets.srcDirs += ['winlator/assets', 'stratagus/assets', 'tools/assets']
+			java.srcDirs += ['winlator/java', 'stratagus/java']
 			res.srcDirs += ['winlator/res']
-			jniLibs.srcDirs += ['winlator/jniLibs']
+			jniLibs.srcDirs += ['winlator/jniLibs', 'tools/jniLibs', 'stratagus/jniLibs']
 		}
 	}
 
@@ -96,15 +111,29 @@ android {
 		noCompress += ['tzst', 'zip']
 	}
 
-	testOptions.unitTests.returnDefaultValues = true
-
 	lint {
 		abortOnError = false
 		checkReleaseBuilds = false
 	}
+
+	testOptions.unitTests.includeAndroidResources = true
+	testOptions.unitTests.all {
+		systemProperty 'robolectric.graphicsMode', 'NATIVE'
+		systemProperty 'robolectric.dependency.repo.url', 'https://maven-central.storage-download.googleapis.com/maven2'
+		maxHeapSize = '3g'
+		// Robolectric's tests are independent: CI runs them in more than one JVM (-PtestForks=N); one by default.
+		maxParallelForks = (project.findProperty('testForks') ?: '1').toInteger()
+		// The X server rig (tools/xrig): Winlator's X server's native half built for this machine, when the rig is asked for.
+		def xrigLib = System.getenv('BLIZZ_XRIG_LIB')
+		if (xrigLib) systemProperty 'java.library.path', xrigLib
+	}
 }
 
 dependencies {
+    implementation project(':warsmash:core')
+    // The Android port's matching backends, pinned and verified with its source archive.
+    implementation files('warsmash/libgdx/gdx-backend-android-release.aar')
+    implementation files('warsmash/gdx-controllers-android/gdx-controllers-android-2.2.3.aar')
 	implementation platform('androidx.compose:compose-bom:2025.04.00')
 	implementation 'androidx.compose.ui:ui'
 	implementation 'androidx.compose.material3:material3'
@@ -113,6 +142,8 @@ dependencies {
 	implementation 'androidx.core:core-ktx:1.12.0'
 	implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
 	implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+	// The Fold's hinge: where it is, and whether the phone's half-open.
+	implementation 'androidx.window:window:1.3.0'
 	// Winlator's.
 	implementation 'androidx.appcompat:appcompat:1.6.1'
 	implementation 'com.google.android.material:material:1.11.0'
@@ -121,7 +152,82 @@ dependencies {
 	implementation 'androidx.preference:preference:1.2.1'
 	implementation 'androidx.lifecycle:lifecycle-process:2.8.7'
 	implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+	// warperia.com's add-on pages (the add-on search in World of Warcraft's page).
+	implementation 'org.jsoup:jsoup:1.18.3'
 	compileOnly 'org.jspecify:jspecify:1.0.0'
 	testImplementation 'junit:junit:4.13.2'
+	// The World of Warcraft app's controls tests, as they were written there.
 	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit:2.3.21'
+	testImplementation 'org.robolectric:robolectric:4.16'
+	testImplementation 'androidx.compose.ui:ui-test-junit4'
+	testImplementation 'androidx.test:core:1.6.1'
+	debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
+
+// libGDX's ARM64 native libraries, extracted into generated build output.
+configurations { warsmashNatives }
+dependencies {
+    warsmashNatives 'com.badlogicgames.gdx:gdx-platform:1.13.0:natives-arm64-v8a'
+    warsmashNatives 'com.badlogicgames.gdx:gdx-freetype-platform:1.13.0:natives-arm64-v8a'
+    warsmashNatives 'com.badlogicgames.gdx:gdx-box2d-platform:1.13.0:natives-arm64-v8a'
+}
+def warsmashJni = layout.buildDirectory.dir('generated/warsmashJni')
+def extractWarsmashNatives = tasks.register('extractWarsmashNatives', Sync) {
+    from({ configurations.warsmashNatives.collect { zipTree(it) } }) { include '*.so'; into 'arm64-v8a' }
+    into warsmashJni
+}
+android.sourceSets.main.jniLibs.srcDir warsmashJni.get().asFile
+tasks.named('preBuild').configure { dependsOn extractWarsmashNatives }
+
+// The character porter's 3D preview (porter/engine, C++ and OpenGL ES 3): built with the NDK's own compiler into generated
+// output and packaged as libporter.so. (The module's CMake build is Winlator's; this small library stays out of it.)
+def porterJni = layout.buildDirectory.dir('generated/porterJni')
+def buildPorterNative = tasks.register('buildPorterNative', Exec) {
+    def engine = rootProject.file('porter/engine')
+    def sources = fileTree(engine) { include '*.cpp' }
+    inputs.files(fileTree(engine) { include '*.cpp', '*.h' })
+    def out = porterJni.get().file('arm64-v8a/libporter.so').asFile
+    outputs.file(out)
+    def host = System.getProperty('os.name').toLowerCase().contains('mac') ? 'darwin-x86_64' : 'linux-x86_64'
+    def ndk = new File(androidComponents.sdkComponents.sdkDirectory.get().asFile, "ndk/${android.ndkVersion}")
+    def clang = new File(ndk, "toolchains/llvm/prebuilt/$host/bin/aarch64-linux-android26-clang++")
+    doFirst { out.parentFile.mkdirs() }
+    commandLine([clang.path, '-shared', '-fPIC', '-O2', '-std=c++17', '-fvisibility=hidden', '-static-libstdc++',
+                 '-Wl,-z,max-page-size=16384', '-Wl,--gc-sections', '-ffunction-sections', '-fdata-sections',
+                 "-I${engine.path}"] + sources.files.collect { it.path }.sort() + ['-lGLESv3', '-lEGL', '-llog', '-o', out.path])
+}
+android.sourceSets.main.jniLibs.srcDir porterJni.get().asFile
+tasks.named('preBuild').configure { dependsOn buildPorterNative }
+
+// Warcraft III's movies (movie/: their player for Warsmash) linked with FFmpeg's decoders for them, which
+// scripts/build-ffmpeg.sh builds into app/ffmpeg/arm64-v8a (git-ignored) the first time.
+def movieJni = layout.buildDirectory.dir('generated/movieJni')
+def ffmpegDir = file('ffmpeg/arm64-v8a')
+def buildFfmpeg = tasks.register('buildFfmpeg', Exec) {
+    inputs.file(rootProject.file('scripts/build-ffmpeg.sh'))
+    outputs.dir(ffmpegDir)
+    // The script itself knows whether its build is current (its STAMP: the release and the script), and returns at once if so.
+    def ndk = new File(androidComponents.sdkComponents.sdkDirectory.get().asFile, "ndk/${android.ndkVersion}")
+    environment 'ANDROID_NDK_ROOT', ndk.path
+    commandLine 'sh', rootProject.file('scripts/build-ffmpeg.sh').path
+}
+def buildMovieNative = tasks.register('buildMovieNative', Exec) {
+    dependsOn buildFfmpeg
+    def sources = [rootProject.file('movie/player.c'), rootProject.file('movie/android.c')]
+    inputs.files(sources + [rootProject.file('movie/player.h')])
+    inputs.dir(ffmpegDir)
+    def out = movieJni.get().file('arm64-v8a/libwc3movie.so').asFile
+    outputs.file(out)
+    def host = System.getProperty('os.name').toLowerCase().contains('mac') ? 'darwin-x86_64' : 'linux-x86_64'
+    def ndk = new File(androidComponents.sdkComponents.sdkDirectory.get().asFile, "ndk/${android.ndkVersion}")
+    def clang = new File(ndk, "toolchains/llvm/prebuilt/$host/bin/aarch64-linux-android26-clang")
+    doFirst { out.parentFile.mkdirs() }
+    def lib = { name -> new File(ffmpegDir, "lib/lib${name}.a").path }
+    commandLine([clang.path, '-shared', '-fPIC', '-O2', '-std=c11', '-fvisibility=default',
+                 '-Wl,-z,max-page-size=16384', '-Wl,--gc-sections', '-ffunction-sections', '-fdata-sections',
+                 '-Wl,-Bsymbolic', '-Wl,--exclude-libs,ALL', "-I${new File(ffmpegDir, 'include').path}"] + sources.collect { it.path } +
+                [lib('avformat'), lib('avcodec'), lib('swscale'), lib('swresample'), lib('avutil'),
+                 '-laaudio', '-landroid', '-llog', '-lm', '-o', out.path])
+}
+android.sourceSets.main.jniLibs.srcDir movieJni.get().asFile
+tasks.named('preBuild').configure { dependsOn buildMovieNative }

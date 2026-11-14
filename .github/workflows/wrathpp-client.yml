@@ -1,0 +1,223 @@
+name: Wrath++ client build probe
+
+# Gate A of docs/wrathpp/MILESTONES.md, its build half: the source-built x64 3.3.5a client
+# (WarcraftXL-Labs/client) with the runtime and SDK of its ABI, at the pins in
+# realm/warcraft/wrathpp/wrathpp.env, built on Windows with Visual Studio 2022 (MSVC x64, Ninja,
+# as the client's own BuildWaystone.bat does), with any Wrath++ patches in
+# realm/warcraft/wrathpp/patches/{client,core}/ applied.
+#
+# What it keeps: the build log, the toolchain's versions and the SHA-256 of what was built. Never
+# the binaries: the client is a decompilation of Blizzard's Wow.exe with no license (its NOTICE.md),
+# so nothing of it is published from here. Booting it needs the game's data, which CI hasn't: that
+# half of Gate A is for a machine with the user's own 3.3.5a copy.
+#
+# Runs when asked (workflow_dispatch) and when this file, the pins or the Wrath++ client patches
+# change; it releases nothing and writes nothing outside its own run.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/wrathpp-client.yml
+      - realm/warcraft/wrathpp/wrathpp.env
+      - realm/warcraft/wrathpp/patches/client/**
+      - realm/warcraft/wrathpp/patches/core/**
+      - realm/warcraft/wrathpp/client-mod/**
+      - app/src/main/assets/wrathpp/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wrathpp-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Client x64 (MSVC 2022)
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: blizzard
+
+      - name: The client, its runtime and SDK at the pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          source blizzard/realm/warcraft/wrathpp/wrathpp.env
+          mkdir -p wxl
+          for part in client core sdk; do
+            repo_var="${part^^}_REPO" commit_var="${part^^}_COMMIT"
+            git init -q "wxl/$part"
+            git -C "wxl/$part" remote add origin "${!repo_var}"
+            git -C "wxl/$part" fetch -q --depth 1 origin "${!commit_var}"
+            git -C "wxl/$part" checkout -q FETCH_HEAD
+            echo "$part ${!commit_var}" | tee -a build-report.txt
+          done
+          for part in client core; do
+            for patch in blizzard/realm/warcraft/wrathpp/patches/$part/*.patch; do
+              [ -f "$patch" ] || continue
+              git -C "wxl/$part" -c user.name=wrathpp -c user.email=wrathpp@users.noreply.github.com am -q "$GITHUB_WORKSPACE/$patch"
+              echo "applied $part $(basename "$patch")" | tee -a build-report.txt
+            done
+          done
+
+      - name: Build (Visual Studio 2022, x64, Ninja)
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -version [17.0^,18.0^) -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
+          call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" > nul || exit /b 1
+          cl 2>&1 | findstr /i "version" >> build-report.txt
+          rem MSVC 19.44 stops on the SDK's reflect.hpp at the default constexpr step limit (1048576):
+          rem the probe's first run, 2026-11-10. CXXFLAGS also reaches the sub-builds CMake configures.
+          set "CXXFLAGS=/constexpr:steps16777216"
+          echo CXXFLAGS=%CXXFLAGS% >> build-report.txt
+          cmake --version >> build-report.txt
+          cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -S wxl\client -B wxl\build -DWXL_CORE_DIR=%GITHUB_WORKSPACE%\wxl\core -DWXL_SDK_DIR=%GITHUB_WORKSPACE%\wxl\sdk > configure.log 2>&1
+          if errorlevel 1 (type configure.log & exit /b 1)
+          cmake --build wxl\build --target WowClient --parallel > build.log 2>&1
+          set BUILD_EXIT=%ERRORLEVEL%
+          powershell -NoProfile -Command "Get-Content build.log -Tail 80"
+          exit /b %BUILD_EXIT%
+
+      - name: What was built
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "== outputs (SHA-256; the files themselves are not kept)"
+            find wxl/client/bin -maxdepth 3 -type f \( -name '*.exe' -o -name '*.dll' \) -exec sha256sum {} + 2> /dev/null || echo "none"
+            echo "== warnings: $(grep -c 'warning' build.log 2> /dev/null || echo 0), errors: $(grep -c ' error ' build.log 2> /dev/null || echo 0)"
+          } | tee -a build-report.txt
+          grep -E ' error |fatal error' build.log | head -60 > build-errors.txt 2> /dev/null || true
+
+      - name: Keep the report and logs (no binaries)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrathpp-client-build-report
+          retention-days: 14
+          path: |
+            build-report.txt
+            build-errors.txt
+            configure.log
+            build.log
+
+  # Wrath++'s add-on for the phone's stock 32-bit Wow.exe (docs/wrathpp/CLIENT_PROBE.md): WarcraftXL's 32-bit runtime
+  # (WarcraftXL.dll), its Lua mod runtime and glue-unlock, the Wrath++ native mod (the creator's current choices and
+  # counts) and Lua mod (the appearance protocol), and the creator's script. All MIT or Wrath++'s own: no game code. The
+  # app downloads it (release wrathpp-client-addon) into Wrath++'s copy of the game only, and patches that copy's
+  # WowWrathpp.exe itself (WxlPatcher.kt, the same bytes as wxl-core-patcher).
+  addon:
+    name: Add-on for the 32-bit client (MSVC 2022, x86)
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: blizzard
+
+      - name: The runtime and SDK at the pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          source blizzard/realm/warcraft/wrathpp/wrathpp.env
+          mkdir -p wxl
+          for part in core sdk; do
+            repo_var="${part^^}_REPO" commit_var="${part^^}_COMMIT"
+            git init -q "wxl/$part"
+            git -C "wxl/$part" remote add origin "${!repo_var}"
+            git -C "wxl/$part" fetch -q --depth 1 origin "${!commit_var}"
+            git -C "wxl/$part" checkout -q FETCH_HEAD
+            echo "$part ${!commit_var}" | tee -a addon-report.txt
+          done
+          for patch in blizzard/realm/warcraft/wrathpp/patches/core/*.patch; do
+            [ -f "$patch" ] || continue
+            git -C wxl/core -c user.name=wrathpp -c user.email=wrathpp@users.noreply.github.com am -q "$GITHUB_WORKSPACE/$patch"
+            echo "applied core $(basename "$patch")" | tee -a addon-report.txt
+          done
+
+      - name: Build (Visual Studio 2022, Win32)
+        shell: cmd
+        run: |
+          set "CXXFLAGS=/constexpr:steps16777216"
+          rem The 32-bit tree alone (the core README's "Build one"), and only what the add-on ships: the runtime, glue-unlock
+          rem and wxl.lua. WarcraftXL's own test programs don't build on this runner's MSBuild (first run, 2026-11-10).
+          cmake -S wxl\core -B wxl\build-core -G "Visual Studio 17 2022" -A Win32 -DWXL_CORE_ARCH=win-x86 -DWXL_SDK_DIR=%GITHUB_WORKSPACE%\wxl\sdk -DWXL_PROFILE=OFF > core-configure.log 2>&1
+          if errorlevel 1 (type core-configure.log & exit /b 1)
+          cmake --build wxl\build-core --config Release --parallel --target wxl-core glue-unlock wxl-core-lua > core-build.log 2>&1
+          set CORE_EXIT=%ERRORLEVEL%
+          powershell -NoProfile -Command "Get-Content core-build.log -Tail 60"
+          if not "%CORE_EXIT%"=="0" exit /b %CORE_EXIT%
+          cmake -S blizzard\realm\warcraft\wrathpp\client-mod\wrathpp-native -B wxl\build-native -G "Visual Studio 17 2022" -DWXL_SDK_DIR=%GITHUB_WORKSPACE%\wxl\sdk > native-configure.log 2>&1
+          if errorlevel 1 (type native-configure.log & exit /b 1)
+          cmake --build wxl\build-native --config Release > native-build.log 2>&1
+          set NATIVE_EXIT=%ERRORLEVEL%
+          powershell -NoProfile -Command "Get-Content native-build.log -Tail 60"
+          exit /b %NATIVE_EXIT%
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist=wxl/build-core/Release/WarcraftXL.dll
+          [ -f "$dist" ] || { echo "no x86 WarcraftXL.dll"; find wxl/build-core -name 'WarcraftXL.dll'; exit 1; }
+          root=wxl/build-core/Release
+          native=$(find wxl/build-native -type f -name 'wrathpp-native.dll' | head -1)
+          [ -n "$native" ] || { echo "no wrathpp-native.dll"; exit 1; }
+          out=addon/wrathpp-client-addon
+          mkdir -p "$out/Mods" "$out/Interface/GlueXML"
+          cp "$dist" "$out/WarcraftXL.dll"
+          for mod in wxl.lua wxl.glue-unlock; do
+            cp -r "$root/Mods/$mod" "$out/Mods/"
+            find "$out/Mods/$mod" -path '*/bin/x64*' -prune -exec rm -rf {} +
+          done
+          # (their manifests from the sources where the build didn't copy them)
+          [ -f "$out/Mods/wxl.glue-unlock/mod.json" ] || cp wxl/core/mods/wxl.glue-unlock/mod.json "$out/Mods/wxl.glue-unlock/"
+          [ -f "$out/Mods/wxl.lua/mod.json" ] || cp wxl/sdk/lua/mod.json "$out/Mods/wxl.lua/"
+          ls -R "$out/Mods" | head -40
+          mkdir -p "$out/Mods/wrathpp.native/bin/x86"
+          cp blizzard/realm/warcraft/wrathpp/client-mod/wrathpp-native/mod.json "$out/Mods/wrathpp.native/"
+          cp "$native" "$out/Mods/wrathpp.native/bin/x86/"
+          cp -r blizzard/realm/warcraft/wrathpp/client-mod/wrathpp "$out/Mods/wrathpp.appearance"
+          cp blizzard/app/src/main/assets/wrathpp/WrathppCreate.lua "$out/Interface/GlueXML/"
+          ( cd addon && 7z a -tzip -mx=9 ../wrathpp-client-addon.zip wrathpp-client-addon > /dev/null )
+          size=$(stat -c %s wrathpp-client-addon.zip)
+          sha=$(sha256sum wrathpp-client-addon.zip | cut -d' ' -f1)
+          printf '{"size": %s, "sha256": "%s", "format": 1, "commit": "%s"}\n' "$size" "$sha" "${{ github.sha }}" > wrathpp-client-addon.json
+          cat wrathpp-client-addon.json
+          ( cd addon && find . -type f | sort ) | tee -a addon-report.txt
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrathpp-client-addon-logs
+          retention-days: 14
+          path: |
+            addon-report.txt
+            core-configure.log
+            core-build.log
+            native-configure.log
+            native-build.log
+
+      # Only main publishes: the app downloads whatever is published.
+      - name: Publish (release wrathpp-client-addon)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="${{ github.repository }}"
+          if ! gh release view wrathpp-client-addon -R "$repo" > /dev/null 2>&1; then
+            gh api -X POST "repos/$repo/git/refs" -f ref="refs/tags/wrathpp-client-addon" -f sha="${{ github.sha }}" > /dev/null || true
+            gh release create wrathpp-client-addon -R "$repo" --verify-tag --prerelease --latest=false \
+              --title "Wrath++ add-on for the 32-bit client (experimental)" \
+              --notes "WarcraftXL's 32-bit runtime and Wrath++'s mods for Wrath++'s copy of the game. Downloaded by the app; not an app release."
+          fi
+          gh release upload wrathpp-client-addon wrathpp-client-addon.zip wrathpp-client-addon.json -R "$repo" --clobber

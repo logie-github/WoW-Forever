@@ -17,7 +17,7 @@ index 63636b5..e5fb2c7 100644
              Intent intent = getIntent();
              if (intent.hasExtra("exec_path")) {
                  execPath = WineUtils.unixToDOSPath(intent.getStringExtra("exec_path"), container);
-+                // WoW Forever app: the program's arguments apart from its path, which is converted to
++                // Blizzard app: the program's arguments apart from its path, which is converted to
 +                // a Windows path and split at its last backslash (arguments with paths broke that).
 +                if (intent.hasExtra("exec_args") && !intent.getStringExtra("exec_args").isEmpty()) {
 +                    execArgs = " "+intent.getStringExtra("exec_args");
